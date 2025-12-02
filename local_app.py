@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ham the Hire Tracker - Local Application
+Hammy the Hire Tracker - Local Application
 AI-powered job tracking system with Gmail integration and Chrome extension support.
 
 Go HAM on your job search! 🐷
@@ -214,9 +214,17 @@ def init_db():
             type TEXT,
             snippet TEXT,
             email_date TEXT,
+            job_id TEXT,
             created_at TEXT
         )
     ''')
+
+    # Migration: Add job_id column if it doesn't exist
+    try:
+        conn.execute("SELECT job_id FROM followups LIMIT 1")
+    except sqlite3.OperationalError:
+        print("Migrating database: adding 'job_id' column to followups...")
+        conn.execute("ALTER TABLE followups ADD COLUMN job_id TEXT")
     
     # Migration: Add viewed column if it doesn't exist
     try:
@@ -1299,14 +1307,14 @@ DASHBOARD_HTML = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ham the Hire Tracker</title>
+    <title>Hammy the Hire Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="max-w-6xl mx-auto p-6">
         <div class="flex justify-between items-center mb-6">
             <div>
-                <h1 class="text-3xl font-bold">🐷 Ham the Hire Tracker</h1>
+                <h1 class="text-3xl font-bold">🐷 Hammy the Hire Tracker</h1>
                 <p class="text-gray-600">Go HAM on your job search!</p>
             </div>
             <div class="space-x-2">
@@ -2430,7 +2438,7 @@ if __name__ == '__main__':
 
     # Display startup info
     print("\n" + "="*60)
-    print("🐷 Ham the Hire Tracker - Go HAM on Your Job Search!")
+    print("🐷 Hammy the Hire Tracker - Go HAM on Your Job Search!")
     print("="*60)
     print(f"\n👤 User: {CONFIG.user_name}")
     print(f"📧 Email: {CONFIG.user_email}")
@@ -2438,7 +2446,7 @@ if __name__ == '__main__':
     print(f"\n📁 Configuration: {APP_DIR / 'config.yaml'}")
     print(f"📁 Database: {DB_PATH}")
     print(f"📁 Gmail credentials: {CREDENTIALS_FILE}")
-    print(f"\n💡 Ham's Quick Start Guide:")
+    print(f"\n💡 Hammy's Quick Start Guide:")
     print(f"   1. Click '📧 Scan Gmail' to import job alerts")
     print(f"   2. Click '🤖 Analyze All' for AI analysis")
     print(f"   3. Click '📬 Scan Follow-Ups' to track responses")

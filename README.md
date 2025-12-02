@@ -1,4 +1,4 @@
-# 🎩 Henry the Hire Tracker
+# 🎩 Ham the Hire Tracker
 
 **AI-Powered Job Search Assistant** that automatically scans your Gmail for job alerts, analyzes opportunities against your resume using Claude AI, and helps you track applications with intelligent insights.
 

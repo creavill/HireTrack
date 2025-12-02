@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Henry the Hire Tracker - Local Application
+Ham the Hire Tracker - Local Application
 AI-powered job tracking system with Gmail integration and Chrome extension support.
+
+Go HAM on your job search! 🐷
 
 This application:
 - Scans Gmail for job alerts from LinkedIn, Indeed, and other job boards
@@ -9,6 +11,7 @@ This application:
 - Provides a web dashboard for tracking applications
 - Integrates with a Chrome extension for instant job analysis
 - Generates tailored cover letters and interview prep answers
+- Scans for follow-up emails (interviews, rejections, offers)
 
 Configuration is loaded from config.yaml for easy personalization.
 """
@@ -751,6 +754,255 @@ def scan_emails(days_back=7):
     print(f"📌 Next scan will query emails after: {current_scan_time}")
     return all_jobs
 
+# ============== Follow-Up Email Scanning ==============
+def classify_followup_email(subject: str, snippet: str) -> str:
+    """
+    Classify follow-up email type based on subject and snippet.
+
+    Uses keyword matching to determine if email is:
+    - interview: Interview request or scheduling
+    - rejection: Application declined
+    - received: Application confirmation
+    - offer: Job offer
+    - assessment: Coding challenge or take-home project
+
+    Args:
+        subject: Email subject line (lowercase)
+        snippet: Email preview text (lowercase)
+
+    Returns:
+        Email type string
+    """
+    text = (subject + " " + snippet).lower()
+
+    # Check for interview requests (highest priority)
+    if any(word in text for word in ['interview', 'phone screen', 'video call', 'meet the team',
+                                       'schedule a call', 'next steps', 'speak with', 'chat with']):
+        return 'interview'
+
+    # Check for offers
+    if any(word in text for word in ['offer', 'congratulations', 'pleased to extend',
+                                      'compensation package', 'welcome to the team']):
+        return 'offer'
+
+    # Check for assessments/challenges
+    if any(word in text for word in ['assessment', 'coding challenge', 'take-home',
+                                      'technical exercise', 'complete the', 'test project']):
+        return 'assessment'
+
+    # Check for rejections
+    if any(word in text for word in ['unfortunately', 'not moving forward', 'other candidates',
+                                      'decided to pursue', 'not selected', 'will not be moving',
+                                      'unable to move forward', 'chosen to move forward with']):
+        return 'rejection'
+
+    # Check for application received confirmations
+    if any(word in text for word in ['received your application', 'thank you for applying',
+                                      'application has been', 'reviewing your', 'under review']):
+        return 'received'
+
+    # Default: general update
+    return 'update'
+
+
+def extract_company_from_email(from_email: str, subject: str) -> str:
+    """
+    Extract company name from email sender or subject.
+
+    Args:
+        from_email: Sender email address
+        subject: Email subject line
+
+    Returns:
+        Extracted company name or 'Unknown'
+    """
+    # Try to extract from email domain
+    if '@' in from_email:
+        domain = from_email.split('@')[1].lower()
+
+        # Remove common suffixes
+        company = domain.replace('.com', '').replace('.io', '').replace('.co', '')
+        company = company.replace('greenhouse', '').replace('lever', '').replace('workday', '')
+
+        # Skip generic domains
+        if company not in ['gmail', 'outlook', 'yahoo', 'hotmail', 'mail', 'email']:
+            return company.title()
+
+    # Try to extract from subject (e.g., "Your Application at Company Name")
+    patterns = [
+        r'at\s+([A-Z][A-Za-z0-9\s&.,-]+)',
+        r'with\s+([A-Z][A-Za-z0-9\s&.,-]+)',
+        r'from\s+([A-Z][A-Za-z0-9\s&.,-]+)',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, subject)
+        if match:
+            company = match.group(1).strip()
+            # Remove common trailing words
+            company = re.sub(r'\s+(team|recruiting|talent|careers)$', '', company, flags=re.IGNORECASE)
+            return company[:50]  # Limit length
+
+    return 'Unknown'
+
+
+def fuzzy_match_company(email_company: str, conn) -> Optional[str]:
+    """
+    Find matching job in database by fuzzy company name matching.
+
+    Args:
+        email_company: Company name extracted from email
+        conn: Database connection
+
+    Returns:
+        job_id if match found, None otherwise
+    """
+    # Try exact match first
+    result = conn.execute(
+        "SELECT job_id FROM jobs WHERE LOWER(company) = ? AND status IN ('applied', 'interviewing')",
+        (email_company.lower(),)
+    ).fetchone()
+
+    if result:
+        return result[0]
+
+    # Try partial match (company name contains or is contained in email company)
+    applied_jobs = conn.execute(
+        "SELECT job_id, company FROM jobs WHERE status IN ('applied', 'interviewing')"
+    ).fetchall()
+
+    for job in applied_jobs:
+        job_id, job_company = job[0], job[1].lower()
+        email_comp_lower = email_company.lower()
+
+        # Check if one contains the other
+        if job_company in email_comp_lower or email_comp_lower in job_company:
+            return job_id
+
+        # Check for common abbreviations (e.g., "Meta" vs "Facebook")
+        company_map = {
+            'meta': 'facebook',
+            'google': 'alphabet',
+            'aws': 'amazon',
+        }
+
+        for key, value in company_map.items():
+            if (key in job_company and value in email_comp_lower) or \
+               (value in job_company and key in email_comp_lower):
+                return job_id
+
+    return None
+
+
+def scan_followup_emails(days_back: int = 30) -> List[Dict]:
+    """
+    Scan Gmail for follow-up emails (interviews, rejections, offers).
+
+    Checks both inbox and spam folders for responses to job applications.
+    Automatically classifies emails and matches them to jobs in database.
+
+    Args:
+        days_back: How many days back to scan (default: 30)
+
+    Returns:
+        List of follow-up email dictionaries
+    """
+    service = get_gmail_service()
+    after_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
+
+    # Queries for different types of follow-ups
+    queries = [
+        # Interview requests
+        f'(subject:interview OR subject:"phone screen" OR subject:"next steps" OR subject:"schedule") after:{after_date}',
+
+        # Rejections (check spam too!)
+        f'(subject:unfortunately OR subject:"not selected" OR subject:"other candidates" OR subject:"decided to pursue") after:{after_date}',
+
+        # Offers
+        f'(subject:offer OR subject:congratulations OR subject:"pleased to extend") after:{after_date}',
+
+        # Assessments
+        f'(subject:assessment OR subject:"coding challenge" OR subject:"take-home") after:{after_date}',
+
+        # Application confirmations
+        f'(subject:"received your application" OR subject:"thank you for applying") after:{after_date}',
+    ]
+
+    followups = []
+    seen_message_ids = set()
+
+    # Scan both INBOX and SPAM
+    for folder in ['INBOX', '[Gmail]/Spam']:
+        for query in queries:
+            try:
+                # Modify query to search in specific folder
+                if folder == '[Gmail]/Spam':
+                    search_query = f'in:spam {query}'
+                else:
+                    search_query = query
+
+                results = service.users().messages().list(userId='me', q=search_query, maxResults=50).execute()
+                messages = results.get('messages', [])
+
+                for msg_info in messages:
+                    msg_id = msg_info['id']
+
+                    # Skip duplicates
+                    if msg_id in seen_message_ids:
+                        continue
+                    seen_message_ids.add(msg_id)
+
+                    try:
+                        message = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+
+                        # Extract email details
+                        headers = message.get('payload', {}).get('headers', [])
+                        subject = ''
+                        from_email = ''
+
+                        for header in headers:
+                            if header['name'].lower() == 'subject':
+                                subject = header['value']
+                            elif header['name'].lower() == 'from':
+                                from_email = header['value']
+
+                        snippet = message.get('snippet', '')
+                        email_date = datetime.fromtimestamp(int(message.get('internalDate', 0)) / 1000).isoformat()
+
+                        # Classify email type
+                        email_type = classify_followup_email(subject, snippet)
+
+                        # Extract company name
+                        company = extract_company_from_email(from_email, subject)
+
+                        # Try to match to a job in database
+                        conn = get_db()
+                        job_id = fuzzy_match_company(company, conn)
+                        conn.close()
+
+                        followups.append({
+                            'company': company,
+                            'subject': subject[:200],
+                            'type': email_type,
+                            'snippet': snippet[:500],
+                            'email_date': email_date,
+                            'job_id': job_id,
+                            'in_spam': folder == '[Gmail]/Spam'
+                        })
+
+                        print(f"📧 {email_type.upper()}: {company} - {subject[:50]}... (spam: {folder == '[Gmail]/Spam'})")
+
+                    except Exception as e:
+                        print(f"Error parsing follow-up email {msg_id}: {e}")
+                        continue
+
+            except Exception as e:
+                print(f"Query failed - {search_query}: {e}")
+                continue
+
+    print(f"\n✅ Follow-up scan complete: {len(followups)} emails found")
+    return followups
+
 # ============== AI Filtering & Scoring ==============
 def load_resumes() -> str:
     """
@@ -1047,15 +1299,15 @@ DASHBOARD_HTML = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Henry the Hire Tracker</title>
+    <title>Ham the Hire Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="max-w-6xl mx-auto p-6">
         <div class="flex justify-between items-center mb-6">
             <div>
-                <h1 class="text-3xl font-bold">🎩 Henry the Hire Tracker</h1>
-                <p class="text-gray-600">Your AI-Powered Job Search Assistant</p>
+                <h1 class="text-3xl font-bold">🐷 Ham the Hire Tracker</h1>
+                <p class="text-gray-600">Go HAM on your job search!</p>
             </div>
             <div class="space-x-2">
                 <button onclick="scanEmails()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
@@ -1067,12 +1319,18 @@ DASHBOARD_HTML = '''
                 <button onclick="analyzeAll()" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
                     🤖 Analyze All
                 </button>
+                <button onclick="scanFollowups()" class="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700">
+                    📬 Scan Follow-Ups
+                </button>
             </div>
         </div>
         
         <div class="mb-6 border-b">
             <button onclick="showTab('jobs')" id="tab-jobs" class="px-4 py-2 font-semibold border-b-2 border-blue-600">
                 Jobs
+            </button>
+            <button onclick="showTab('followups')" id="tab-followups" class="px-4 py-2 font-semibold text-gray-600">
+                📧 Follow-Ups
             </button>
             <button onclick="showTab('watchlist')" id="tab-watchlist" class="px-4 py-2 font-semibold text-gray-600">
                 Watchlist
@@ -1102,7 +1360,12 @@ DASHBOARD_HTML = '''
             
             <div id="jobs" class="space-y-3"></div>
         </div>
-        
+
+        <div id="followups-tab" class="hidden">
+            <div id="followup-stats" class="grid grid-cols-5 gap-4 mb-6"></div>
+            <div id="followups" class="space-y-3"></div>
+        </div>
+
         <div id="watchlist-tab" class="hidden">
             <div class="bg-white rounded-lg shadow p-6 mb-4">
                 <h2 class="text-xl font-bold mb-4">Add Company to Watchlist</h2>
@@ -1130,15 +1393,20 @@ DASHBOARD_HTML = '''
         function showTab(tab) {
             currentTab = tab;
             document.getElementById('jobs-tab').classList.toggle('hidden', tab !== 'jobs');
+            document.getElementById('followups-tab').classList.toggle('hidden', tab !== 'followups');
             document.getElementById('watchlist-tab').classList.toggle('hidden', tab !== 'watchlist');
-            
-            document.getElementById('tab-jobs').className = tab === 'jobs' 
+
+            document.getElementById('tab-jobs').className = tab === 'jobs'
+                ? 'px-4 py-2 font-semibold border-b-2 border-blue-600'
+                : 'px-4 py-2 font-semibold text-gray-600';
+            document.getElementById('tab-followups').className = tab === 'followups'
                 ? 'px-4 py-2 font-semibold border-b-2 border-blue-600'
                 : 'px-4 py-2 font-semibold text-gray-600';
             document.getElementById('tab-watchlist').className = tab === 'watchlist'
                 ? 'px-4 py-2 font-semibold border-b-2 border-blue-600'
                 : 'px-4 py-2 font-semibold text-gray-600';
-            
+
+            if (tab === 'followups') loadFollowups();
             if (tab === 'watchlist') loadWatchlist();
         }
         
@@ -1431,7 +1699,103 @@ DASHBOARD_HTML = '''
             await fetch(`/api/jobs/${jobId}/cover-letter`, {method: 'POST'});
             loadJobs();
         }
-        
+
+        async function scanFollowups() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Scanning Follow-Ups...';
+            try {
+                const res = await fetch('/api/scan-followups', {method: 'POST'});
+                const data = await res.json();
+                alert(`Found ${data.found} follow-ups!\\n${data.new} new\\n${data.updated_jobs} jobs updated`);
+                await loadFollowups();
+                await loadJobs();
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📬 Scan Follow-Ups';
+            }
+        }
+
+        async function loadFollowups() {
+            const res = await fetch('/api/followups');
+            const data = await res.json();
+
+            // Display statistics
+            const stats = data.stats;
+            document.getElementById('followup-stats').innerHTML = `
+                <div class="bg-white rounded-lg shadow p-4 text-center">
+                    <div class="text-2xl font-bold">${stats.total}</div>
+                    <div class="text-sm text-gray-600">Total Responses</div>
+                </div>
+                <div class="bg-green-100 rounded-lg shadow p-4 text-center">
+                    <div class="text-2xl font-bold text-green-700">🎉 ${stats.interviews}</div>
+                    <div class="text-sm text-gray-600">Interviews</div>
+                </div>
+                <div class="bg-blue-100 rounded-lg shadow p-4 text-center">
+                    <div class="text-2xl font-bold text-blue-700">🎁 ${stats.offers}</div>
+                    <div class="text-sm text-gray-600">Offers</div>
+                </div>
+                <div class="bg-red-100 rounded-lg shadow p-4 text-center">
+                    <div class="text-2xl font-bold text-red-700">😞 ${stats.rejections}</div>
+                    <div class="text-sm text-gray-600">Rejections</div>
+                </div>
+                <div class="bg-purple-100 rounded-lg shadow p-4 text-center">
+                    <div class="text-2xl font-bold text-purple-700">${stats.response_rate}%</div>
+                    <div class="text-sm text-gray-600">Response Rate</div>
+                </div>
+            `;
+
+            // Display follow-ups
+            const followupsHTML = data.followups.map(f => {
+                const typeIcons = {
+                    'interview': '🎉',
+                    'rejection': '😞',
+                    'offer': '🎁',
+                    'assessment': '📋',
+                    'received': '✅',
+                    'update': '📧'
+                };
+                const typeColors = {
+                    'interview': 'bg-green-100 border-green-300',
+                    'rejection': 'bg-red-100 border-red-300',
+                    'offer': 'bg-blue-100 border-blue-300',
+                    'assessment': 'bg-purple-100 border-purple-300',
+                    'received': 'bg-gray-100 border-gray-300',
+                    'update': 'bg-yellow-100 border-yellow-300'
+                };
+
+                const icon = typeIcons[f.type] || '📧';
+                const color = typeColors[f.type] || 'bg-gray-100 border-gray-300';
+                const matchBadge = f.job_id ? '<span class="text-xs bg-blue-500 text-white px-2 py-1 rounded">Matched</span>' : '';
+                const spamBadge = f.in_spam ? '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">Was in Spam!</span>' : '';
+
+                return `
+                    <div class="bg-white rounded-lg shadow border-l-4 ${color} p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-2xl">${icon}</span>
+                                    <h3 class="font-bold text-lg">${f.type.toUpperCase()}: ${f.company}</h3>
+                                    ${matchBadge}
+                                    ${spamBadge}
+                                </div>
+                                <p class="text-sm text-gray-600">${f.subject}</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm text-gray-500">${formatDate(f.email_date)}</div>
+                                ${f.title ? `<div class="text-xs text-blue-600 mt-1">${f.title}</div>` : ''}
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-700 mt-2">${f.snippet}</p>
+                        ${f.url ? `<a href="${f.url}" target="_blank" class="text-blue-600 text-sm hover:underline mt-2 inline-block">View Job →</a>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('followups').innerHTML = followupsHTML ||
+                '<div class="bg-white rounded-lg shadow p-8 text-center text-gray-500">No follow-ups yet. Click "📬 Scan Follow-Ups" to check your email!</div>';
+        }
+
         loadJobs();
     </script>
 </body>
@@ -1610,6 +1974,110 @@ def api_analyze():
     
     conn.close()
     return jsonify({'analyzed': len(jobs)})
+
+@app.route('/api/scan-followups', methods=['POST'])
+def api_scan_followups():
+    """
+    Scan Gmail for follow-up emails (interviews, rejections, offers).
+    Automatically updates job statuses and stores follow-ups in database.
+    """
+    followups = scan_followup_emails(days_back=30)
+
+    conn = get_db()
+    new_count = 0
+    updated_jobs = 0
+
+    try:
+        for followup in followups:
+            # Check if this follow-up already exists
+            existing = conn.execute(
+                "SELECT id FROM followups WHERE company = ? AND subject = ? AND email_date = ?",
+                (followup['company'], followup['subject'], followup['email_date'])
+            ).fetchone()
+
+            if existing:
+                continue  # Skip duplicates
+
+            # Insert follow-up into database
+            conn.execute(
+                '''INSERT INTO followups (company, subject, type, snippet, email_date, job_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (followup['company'], followup['subject'], followup['type'],
+                 followup['snippet'], followup['email_date'], followup['job_id'],
+                 datetime.now().isoformat())
+            )
+            conn.commit()
+            new_count += 1
+
+            # Auto-update job status if matched
+            if followup['job_id']:
+                job = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (followup['job_id'],)).fetchone()
+
+                if job:
+                    current_status = job[0]
+                    new_status = current_status
+
+                    # Update status based on follow-up type
+                    if followup['type'] == 'rejection' and current_status != 'rejected':
+                        new_status = 'rejected'
+                    elif followup['type'] == 'interview' and current_status not in ['interviewing', 'offered', 'accepted']:
+                        new_status = 'interviewing'
+                    elif followup['type'] == 'offer' and current_status not in ['offered', 'accepted']:
+                        new_status = 'offered'
+
+                    if new_status != current_status:
+                        conn.execute(
+                            "UPDATE jobs SET status = ?, updated_at = ? WHERE job_id = ?",
+                            (new_status, datetime.now().isoformat(), followup['job_id'])
+                        )
+                        conn.commit()
+                        updated_jobs += 1
+                        print(f"✓ Updated {followup['company']} → {new_status}")
+
+    finally:
+        conn.close()
+
+    return jsonify({
+        'found': len(followups),
+        'new': new_count,
+        'updated_jobs': updated_jobs
+    })
+
+@app.route('/api/followups', methods=['GET'])
+def api_get_followups():
+    """Get all follow-up emails with associated job info."""
+    conn = get_db()
+
+    followups = conn.execute('''
+        SELECT f.*, j.title, j.company as job_company, j.url
+        FROM followups f
+        LEFT JOIN jobs j ON f.job_id = j.job_id
+        ORDER BY f.email_date DESC
+        LIMIT 100
+    ''').fetchall()
+
+    # Calculate statistics
+    stats = {
+        'total': len(followups),
+        'interviews': len([f for f in followups if f['type'] == 'interview']),
+        'rejections': len([f for f in followups if f['type'] == 'rejection']),
+        'offers': len([f for f in followups if f['type'] == 'offer']),
+        'assessments': len([f for f in followups if f['type'] == 'assessment']),
+    }
+
+    # Calculate response rate
+    applied_count = conn.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('applied', 'interviewing', 'offered', 'rejected')").fetchone()[0]
+    if applied_count > 0:
+        stats['response_rate'] = round((stats['total'] / applied_count) * 100, 1)
+    else:
+        stats['response_rate'] = 0
+
+    conn.close()
+
+    return jsonify({
+        'followups': [dict(row) for row in followups],
+        'stats': stats
+    })
 
 @app.route('/api/jobs/<job_id>/cover-letter', methods=['POST'])
 def api_cover_letter(job_id):
@@ -1962,7 +2430,7 @@ if __name__ == '__main__':
 
     # Display startup info
     print("\n" + "="*60)
-    print("🎩 Henry the Hire Tracker - AI-Powered Job Search Assistant")
+    print("🐷 Ham the Hire Tracker - Go HAM on Your Job Search!")
     print("="*60)
     print(f"\n👤 User: {CONFIG.user_name}")
     print(f"📧 Email: {CONFIG.user_email}")
@@ -1970,10 +2438,11 @@ if __name__ == '__main__':
     print(f"\n📁 Configuration: {APP_DIR / 'config.yaml'}")
     print(f"📁 Database: {DB_PATH}")
     print(f"📁 Gmail credentials: {CREDENTIALS_FILE}")
-    print(f"\n💡 To get started:")
+    print(f"\n💡 Ham's Quick Start Guide:")
     print(f"   1. Click '📧 Scan Gmail' to import job alerts")
     print(f"   2. Click '🤖 Analyze All' for AI analysis")
-    print(f"   3. Use the Chrome extension for instant analysis")
+    print(f"   3. Click '📬 Scan Follow-Ups' to track responses")
+    print(f"   4. Use the Chrome extension for instant analysis")
     print(f"\n🚀 Dashboard running at: http://localhost:5000")
     print("="*60 + "\n")
 

@@ -1,4 +1,4 @@
-# 🏗️ Henry the Hire Tracker - Architecture Documentation
+# 🏗️ Ham the Hire Tracker - Architecture Documentation
 
 This document provides a technical deep-dive into the system architecture, design decisions, and implementation details.
 
@@ -6,7 +6,7 @@ This document provides a technical deep-dive into the system architecture, desig
 
 ## System Overview
 
-Henry the Hire Tracker is a full-stack application combining:
+Ham the Hire Tracker is a full-stack application combining:
 - **Gmail API integration** for automated job discovery
 - **Claude AI (Anthropic)** for intelligent job analysis
 - **Flask REST API** for backend services

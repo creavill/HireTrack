@@ -1887,26 +1887,35 @@ def get_jobs():
 def update_job(job_id):
     data = request.json
     conn = get_db()
-    
+
     # Build update query dynamically
     allowed_fields = ['status', 'notes', 'viewed', 'applied_date', 'interview_date']
     updates = []
     params = []
-    
+
     for field in allowed_fields:
         if field in data:
             updates.append(f"{field} = ?")
             params.append(data[field])
-    
+
     if updates:
         updates.append("updated_at = ?")
         params.append(datetime.now().isoformat())
         params.append(job_id)
-        
+
         query = f"UPDATE jobs SET {', '.join(updates)} WHERE job_id = ?"
         conn.execute(query, params)
+
+        # If status is being updated and this job is linked to an external application, sync it
+        if 'status' in data:
+            conn.execute(
+                "UPDATE external_applications SET status = ?, updated_at = ? WHERE job_id = ?",
+                (data['status'], datetime.now().isoformat(), job_id)
+            )
+            print(f"[Backend] Synced status '{data['status']}' to linked external application")
+
         conn.commit()
-    
+
     conn.close()
     return jsonify({'success': True})
 
@@ -2494,6 +2503,10 @@ def create_external_application():
     """
     Create a new external application.
     Required fields: title, company, applied_date, source
+
+    This endpoint now creates BOTH:
+    1. An entry in the external_applications table (for tracking application details)
+    2. An entry in the jobs table (so it appears in the main job list with status='applied')
     """
     data = request.json
     print(f"[Backend] POST /api/external-applications - Received data: {data}")
@@ -2505,12 +2518,12 @@ def create_external_application():
             print(f"[Backend] Validation failed: {field} is missing")
             return jsonify({'error': f'{field} is required'}), 400
 
-    # Generate unique ID
+    # Generate unique IDs
     app_id = str(uuid.uuid4())[:16]
-    print(f"[Backend] Generated app_id: {app_id}")
+    job_id = str(uuid.uuid4())[:16]  # Create a new job_id for the job entry
+    print(f"[Backend] Generated app_id: {app_id}, job_id: {job_id}")
 
     # Get optional fields
-    job_id = data.get('job_id')
     location = data.get('location', '')
     url = data.get('url', '')
     application_method = data.get('application_method', '')
@@ -2519,12 +2532,30 @@ def create_external_application():
     status = data.get('status', 'applied')
     follow_up_date = data.get('follow_up_date')
     notes = data.get('notes', '')
-    is_linked_to_job = 1 if job_id else 0
 
     now = datetime.now().isoformat()
 
     try:
         conn = get_db()
+
+        # First, create a job entry in the jobs table
+        # This makes the external application show up in the main job list
+        conn.execute('''
+            INSERT INTO jobs (
+                job_id, title, company, location, url, source,
+                status, score, baseline_score, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            job_id, data['title'], data['company'], location, url,
+            f"external_{data['source']}", # Prefix source to identify it came from external tracking
+            'applied',  # Set status to 'applied' since this is an external application
+            0,  # Default score
+            0,  # Default baseline score
+            now, now
+        ))
+        print(f"[Backend] Created job entry with job_id: {job_id}")
+
+        # Then, create the external application entry linked to the job
         conn.execute('''
             INSERT INTO external_applications (
                 app_id, job_id, title, company, location, url, source,
@@ -2534,16 +2565,18 @@ def create_external_application():
         ''', (
             app_id, job_id, data['title'], data['company'], location, url, data['source'],
             application_method, data['applied_date'], contact_name, contact_email,
-            status, follow_up_date, notes, now, now, is_linked_to_job
+            status, follow_up_date, notes, now, now, 1  # is_linked_to_job = 1
         ))
+        print(f"[Backend] Created external application entry linked to job_id: {job_id}")
+
         conn.commit()
         conn.close()
-        print(f"[Backend] Successfully inserted external application: {data['title']} at {data['company']}")
+        print(f"[Backend] Successfully inserted external application and job: {data['title']} at {data['company']}")
     except Exception as e:
         print(f"[Backend] Database error: {str(e)}")
         return jsonify({'error': f'Database error: {str(e)}'}), 500
 
-    return jsonify({'success': True, 'app_id': app_id})
+    return jsonify({'success': True, 'app_id': app_id, 'job_id': job_id})
 
 @app.route('/api/external-applications/<app_id>', methods=['GET'])
 def get_external_application(app_id):
@@ -2562,7 +2595,7 @@ def get_external_application(app_id):
 
 @app.route('/api/external-applications/<app_id>', methods=['PATCH'])
 def update_external_application(app_id):
-    """Update an external application."""
+    """Update an external application and sync status to linked job."""
     data = request.json
     conn = get_db()
 
@@ -2587,6 +2620,22 @@ def update_external_application(app_id):
 
         query = f"UPDATE external_applications SET {', '.join(updates)} WHERE app_id = ?"
         conn.execute(query, params)
+
+        # If status is being updated, also update the linked job's status
+        if 'status' in data:
+            # Get the job_id for this external application
+            app = conn.execute(
+                "SELECT job_id FROM external_applications WHERE app_id = ?",
+                (app_id,)
+            ).fetchone()
+
+            if app and app['job_id']:
+                conn.execute(
+                    "UPDATE jobs SET status = ?, updated_at = ? WHERE job_id = ?",
+                    (data['status'], datetime.now().isoformat(), app['job_id'])
+                )
+                print(f"[Backend] Synced status '{data['status']}' to linked job: {app['job_id']}")
+
         conn.commit()
 
     conn.close()
@@ -2594,9 +2643,23 @@ def update_external_application(app_id):
 
 @app.route('/api/external-applications/<app_id>', methods=['DELETE'])
 def delete_external_application(app_id):
-    """Delete an external application."""
+    """Delete an external application and its linked job."""
     conn = get_db()
+
+    # First, get the job_id if it exists
+    app = conn.execute(
+        "SELECT job_id FROM external_applications WHERE app_id = ?",
+        (app_id,)
+    ).fetchone()
+
+    # Delete the external application
     conn.execute("DELETE FROM external_applications WHERE app_id = ?", (app_id,))
+
+    # If there's a linked job, delete it too
+    if app and app['job_id']:
+        conn.execute("DELETE FROM jobs WHERE job_id = ?", (app['job_id'],))
+        print(f"[Backend] Deleted linked job: {app['job_id']}")
+
     conn.commit()
     conn.close()
     return jsonify({'success': True})

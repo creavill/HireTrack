@@ -62,7 +62,7 @@ function StatusBadge({ status, onChange, statusConfig }) {
   );
 }
 
-function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, expanded, onToggle }) {
+function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, onDelete, expanded, onToggle }) {
   const analysis = job.analysis || {};
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
 
@@ -86,10 +86,7 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div
-        className="p-4 cursor-pointer hover:bg-gray-50"
-        onClick={onToggle}
-      >
+      <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -207,7 +204,7 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
             >
               <ExternalLink size={14} /> View Job
             </a>
-            
+
             {!job.cover_letter && (
               <button
                 onClick={(e) => { e.stopPropagation(); onGenerateCoverLetter(job.job_id); }}
@@ -216,6 +213,13 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
                 <FileText size={14} /> Generate Cover Letter
               </button>
             )}
+
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(job.job_id); }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700 ml-auto"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
           </div>
           
           <div className="text-xs text-gray-400">
@@ -553,6 +557,7 @@ export default function App() {
   const [stats, setStats] = useState({ total: 0, new: 0, interested: 0, applied: 0, avg_score: 0 });
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [researching, setResearching] = useState(false);
   const [expandedJob, setExpandedJob] = useState(null);
   const [filter, setFilter] = useState({ status: '', minScore: 0, search: '' });
   const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', 'resumes', or 'companies'
@@ -708,6 +713,7 @@ export default function App() {
     }
   };
 
+  // Tracked Companies handlers (from tracked-companies branch)
   const handleAddTrackedCompany = async (companyData) => {
     console.log('[Frontend] Adding tracked company:', companyData);
     try {
@@ -749,6 +755,39 @@ export default function App() {
     } catch (err) {
       console.error('[Frontend] Failed to delete company:', err);
     }
+  };
+
+  // Job management handlers (from job-management-features branch)
+  const handleDeleteJob = async (jobId) => {
+    if (!window.confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await fetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' });
+      fetchJobs();
+    } catch (err) {
+      console.error('Delete job failed:', err);
+    }
+  };
+
+  const handleResearchJobs = async () => {
+    setResearching(true);
+    try {
+      const response = await fetch(`${API_BASE}/research-jobs`, { method: 'POST' });
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✨ Claude found ${data.jobs_saved} new job recommendations!`);
+        // Refresh jobs list to show new researched jobs
+        setTimeout(fetchJobs, 2000);
+      } else {
+        alert(`Research failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Job research failed:', err);
+      alert('Job research failed. Check console for details.');
+    }
+    setResearching(false);
   };
 
   const handleRecommendResume = async (jobId) => {
@@ -833,15 +872,26 @@ export default function App() {
               <h1 className="text-2xl font-bold text-gray-900">Job Tracker</h1>
               <p className="text-sm text-gray-500">AI-powered job matching</p>
             </div>
-            
-            <button
-              onClick={handleScan}
-              disabled={scanning}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              <RefreshCw size={18} className={scanning ? 'animate-spin' : ''} />
-              {scanning ? 'Scanning...' : 'Scan Emails'}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleResearchJobs}
+                disabled={researching}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                <Sparkles size={18} className={researching ? 'animate-pulse' : ''} />
+                {researching ? 'Researching...' : 'Research Jobs with Claude'}
+              </button>
+
+              <button
+                onClick={handleScan}
+                disabled={scanning}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                <RefreshCw size={18} className={scanning ? 'animate-spin' : ''} />
+                {scanning ? 'Scanning...' : 'Scan Emails'}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -960,11 +1010,12 @@ export default function App() {
                   <JobCard
                     key={job.job_id}
                     job={job}
-                    expanded={expandedJob === job.job_id}
-                    onToggle={() => setExpandedJob(expandedJob === job.job_id ? null : job.job_id)}
+                    expanded={true}
+                    onToggle={() => {}}
                     onStatusChange={handleStatusChange}
                     onGenerateCoverLetter={handleGenerateCoverLetter}
                     onRecommendResume={handleRecommendResume}
+                    onDelete={handleDeleteJob}
                   />
                 ))}
               </div>

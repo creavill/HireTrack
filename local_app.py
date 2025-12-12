@@ -2181,6 +2181,25 @@ def update_job(job_id):
     conn.close()
     return jsonify({'success': True})
 
+@app.route('/api/jobs/<job_id>', methods=['DELETE'])
+def delete_job(job_id):
+    """Delete a job from the database."""
+    conn = get_db()
+
+    # Delete the job
+    conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
+
+    # Also delete any linked external applications
+    conn.execute("DELETE FROM external_applications WHERE job_id = ?", (job_id,))
+
+    # Delete any resume usage logs for this job
+    conn.execute("DELETE FROM resume_usage_log WHERE job_id = ?", (job_id,))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True})
+
 @app.route('/api/scan', methods=['POST'])
 def api_scan():
     """Scan emails with AI filtering and baseline scoring."""
@@ -3339,6 +3358,184 @@ def batch_recommend_resumes():
             'failed': len(errors)
         }
     })
+
+@app.route('/api/research-jobs', methods=['POST'])
+def research_jobs():
+    """
+    Use Claude AI to research and recommend jobs based on user's resume and location preferences.
+    Generates 5-10 job recommendations with company names, roles, and why they're a good fit.
+    """
+    print("[Backend] POST /api/research-jobs - Starting Claude job research")
+
+    try:
+        # Load resumes from database
+        resumes = load_resumes_from_db()
+        if not resumes:
+            return jsonify({'error': 'No resumes found in database'}), 400
+
+        # Combine resume content
+        resume_text = "\n\n---RESUME VARIANT---\n\n".join([
+            f"{r['name']}\nFocus: {r.get('focus_areas', 'N/A')}\n\n{r['content']}"
+            for r in resumes
+        ])
+
+        # Get location preferences from config
+        primary_locations = [loc['name'] for loc in CONFIG.primary_locations]
+
+        # Get experience level and preferences
+        exp_level_dict = CONFIG.experience_level
+        exp_level = exp_level_dict.get('current_level', 'mid')
+        min_years = exp_level_dict.get('min_years', 1)
+        max_years = exp_level_dict.get('max_years', 5)
+
+        # Create research prompt
+        research_prompt = f"""You are a job search research assistant. Based on the candidate's resume and preferences, recommend 5-10 specific job opportunities they should pursue.
+
+CANDIDATE'S RESUME:
+{resume_text[:10000]}
+
+LOCATION PREFERENCES:
+Primary locations: {', '.join(primary_locations)}
+
+EXPERIENCE LEVEL:
+Current level: {exp_level}
+Years of experience: {min_years}-{max_years}
+
+TASK:
+Research and recommend 5-10 specific job opportunities that:
+1. Match the candidate's skills and experience level
+2. Are in their preferred locations (especially remote opportunities)
+3. Are realistic and currently in-demand roles
+4. Align with their career trajectory
+
+For each job recommendation, provide:
+- Company name (real companies that commonly hire for these roles)
+- Job title
+- Why it's a good fit (2-3 specific reasons based on their resume)
+- Key skills from their resume that match
+- Estimated match score (0-100)
+
+Return ONLY a valid JSON array with this structure:
+[
+  {{
+    "company": "Company Name",
+    "title": "Job Title",
+    "location": "Location",
+    "why_good_fit": "Specific reasons why this role matches their background...",
+    "matching_skills": ["skill1", "skill2", "skill3"],
+    "match_score": 85,
+    "job_type": "Full-time",
+    "suggested_search_query": "Backend Engineer Python AWS remote"
+  }}
+]
+
+Focus on real, reputable companies and current in-demand roles. Be specific and actionable."""
+
+        # Call Claude API
+        client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
+        response = client.messages.create(
+            model=CONFIG.ai_model or "claude-sonnet-4-20250514",
+            max_tokens=4000,
+            temperature=0.7,
+            messages=[{
+                "role": "user",
+                "content": research_prompt
+            }]
+        )
+
+        # Parse response
+        response_text = response.content[0].text.strip()
+
+        # Extract JSON from response
+        if '```json' in response_text:
+            response_text = response_text.split('```json')[1].split('```')[0].strip()
+        elif '```' in response_text:
+            response_text = response_text.split('```')[1].split('```')[0].strip()
+
+        recommendations = json.loads(response_text)
+
+        print(f"[Backend] Claude generated {len(recommendations)} job recommendations")
+
+        # Save recommendations to database as "researched" jobs
+        conn = get_db()
+        saved_jobs = []
+        now = datetime.now().isoformat()
+
+        for rec in recommendations[:10]:  # Limit to 10
+            # Generate job ID
+            job_id = hashlib.sha256(
+                f"{rec['company']}:{rec['title']}:claude_research".encode()
+            ).hexdigest()[:16]
+
+            # Check if already exists
+            existing = conn.execute(
+                "SELECT job_id FROM jobs WHERE job_id = ?",
+                (job_id,)
+            ).fetchone()
+
+            if existing:
+                print(f"[Backend] Skipping duplicate: {rec['title']} at {rec['company']}")
+                continue
+
+            # Create analysis JSON
+            analysis = {
+                'qualification_score': rec.get('match_score', 80),
+                'should_apply': True,
+                'strengths': rec.get('matching_skills', []),
+                'gaps': [],
+                'recommendation': rec.get('why_good_fit', ''),
+                'resume_to_use': resumes[0]['name'] if resumes else 'default'
+            }
+
+            # Insert into database
+            conn.execute('''
+                INSERT INTO jobs (
+                    job_id, title, company, location, url, source,
+                    status, score, baseline_score, analysis, raw_text,
+                    created_at, updated_at, is_filtered
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                job_id,
+                rec['title'],
+                rec['company'],
+                rec.get('location', primary_locations[0] if primary_locations else 'Remote'),
+                f"https://www.google.com/search?q={rec.get('suggested_search_query', rec['title'] + ' ' + rec['company']).replace(' ', '+')}",
+                'claude_research',
+                'new',
+                rec.get('match_score', 80),
+                rec.get('match_score', 80),
+                json.dumps(analysis),
+                rec.get('why_good_fit', ''),
+                now,
+                now,
+                0
+            ))
+
+            saved_jobs.append({
+                'job_id': job_id,
+                'title': rec['title'],
+                'company': rec['company'],
+                'score': rec.get('match_score', 80)
+            })
+
+        conn.commit()
+        conn.close()
+
+        print(f"[Backend] Saved {len(saved_jobs)} new research jobs to database")
+
+        return jsonify({
+            'success': True,
+            'jobs_found': len(recommendations),
+            'jobs_saved': len(saved_jobs),
+            'saved_jobs': saved_jobs
+        })
+
+    except Exception as e:
+        print(f"[Backend] Error in job research: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Research failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Initialize database

@@ -92,11 +92,6 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
             <div className="flex items-center gap-2 mb-1">
               <ScoreBadge score={job.score} />
               <h3 className="font-semibold text-gray-900 truncate">{job.title}</h3>
-              {resumeRec && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
-                  📄 {Math.round(resumeRec.confidence * 100)}%
-                </span>
-              )}
             </div>
             <p className="text-gray-600 text-sm">{job.company || 'Unknown Company'}</p>
             <p className="text-gray-500 text-xs">{job.location || 'Location not specified'}</p>
@@ -115,59 +110,6 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
       
       {expanded && (
         <div className="border-t px-4 py-3 bg-gray-50 space-y-3">
-          {/* Resume Recommendation Section */}
-          {resumeRec ? (
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-              <h4 className="text-sm font-semibold text-purple-900 mb-2 flex items-center gap-2">
-                <FileText size={16} />
-                Recommended Resume: {resumeRec.resume_name}
-                <span className="ml-auto text-xs font-normal bg-purple-200 px-2 py-0.5 rounded-full">
-                  {Math.round(resumeRec.confidence * 100)}% Match
-                </span>
-              </h4>
-              <p className="text-sm text-purple-800 mb-2">{resumeRec.reasoning}</p>
-              {resumeRec.resume_strengths?.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs font-semibold text-purple-900">Your Strengths:</p>
-                  <ul className="text-xs text-purple-700 space-y-0.5 ml-3">
-                    {resumeRec.resume_strengths.map((s, i) => <li key={i}>✓ {s}</li>)}
-                  </ul>
-                </div>
-              )}
-              {resumeRec.resume_gaps?.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs font-semibold text-purple-900">Gaps to Address:</p>
-                  <ul className="text-xs text-purple-700 space-y-0.5 ml-3">
-                    {resumeRec.resume_gaps.map((g, i) => <li key={i}>• {g}</li>)}
-                  </ul>
-                </div>
-              )}
-              {resumeRec.alternative_resumes?.length > 0 && (
-                <details className="mt-2">
-                  <summary className="text-xs font-semibold text-purple-900 cursor-pointer">
-                    View {resumeRec.alternative_resumes.length} Alternative Resume(s)
-                  </summary>
-                  <div className="mt-1 space-y-1">
-                    {resumeRec.alternative_resumes.map((alt, i) => (
-                      <div key={i} className="text-xs text-purple-700 ml-3">
-                        • {alt.resume_name} ({Math.round(alt.confidence * 100)}%) - {alt.reason}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); handleGetRecommendation(); }}
-              disabled={loadingRecommendation}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:opacity-50"
-            >
-              <Sparkles size={16} />
-              {loadingRecommendation ? 'Getting Recommendation...' : 'Get Resume Recommendation'}
-            </button>
-          )}
-
           {analysis.strengths?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-green-700 uppercase mb-1">Strengths</h4>
@@ -690,9 +632,10 @@ export default function App() {
   const [stats, setStats] = useState({ total: 0, new: 0, interested: 0, applied: 0, avg_score: 0 });
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [scoring, setScoring] = useState(false);
   const [researching, setResearching] = useState(false);
   const [expandedJob, setExpandedJob] = useState(null);
-  const [filter, setFilter] = useState({ status: '', minScore: 0, search: '' });
+  const [filter, setFilter] = useState({ status: '', minScore: 0, search: '', sort: 'date' });
   const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', 'resumes', or 'companies'
   const [externalApps, setExternalApps] = useState([]);
   const [showAddExternal, setShowAddExternal] = useState(false);
@@ -795,7 +738,26 @@ export default function App() {
     }
     setScanning(false);
   };
-  
+
+  const handleScoreJobs = async () => {
+    setScoring(true);
+    try {
+      const response = await fetch(`${API_BASE}/score-jobs`, { method: 'POST' });
+      const data = await response.json();
+      if (data.error) {
+        alert(`Scoring failed: ${data.error}`);
+      } else {
+        alert(`✓ Scored ${data.scored} jobs out of ${data.total}`);
+      }
+      // Refresh jobs to show new scores
+      setTimeout(fetchJobs, 2000);
+    } catch (err) {
+      console.error('Scoring failed:', err);
+      alert('Scoring failed. Check console for details.');
+    }
+    setScoring(false);
+  };
+
   const handleStatusChange = async (jobId, newStatus) => {
     try {
       await fetch(`${API_BASE}/jobs/${jobId}`, {
@@ -892,12 +854,10 @@ export default function App() {
 
   // Job management handlers (from job-management-features branch)
   const handleDeleteJob = async (jobId) => {
-    if (!window.confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
-      return;
-    }
     try {
       await fetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' });
-      fetchJobs();
+      // Update jobs state directly instead of refetching
+      setJobs(prevJobs => prevJobs.filter(job => job.job_id !== jobId));
     } catch (err) {
       console.error('Delete job failed:', err);
     }
@@ -1004,16 +964,35 @@ export default function App() {
     }
   };
 
-  const filteredJobs = jobs.filter(job => {
-    if (filter.search) {
-      const search = filter.search.toLowerCase();
-      const matches = 
-        job.title?.toLowerCase().includes(search) ||
-        job.company?.toLowerCase().includes(search);
-      if (!matches) return false;
-    }
-    return true;
-  });
+  const filteredJobs = jobs
+    .filter(job => {
+      if (filter.search) {
+        const search = filter.search.toLowerCase();
+        const matches =
+          job.title?.toLowerCase().includes(search) ||
+          job.company?.toLowerCase().includes(search);
+        if (!matches) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      switch (filter.sort) {
+        case 'date':
+          return new Date(b.created_at) - new Date(a.created_at);
+        case 'date-oldest':
+          return new Date(a.created_at) - new Date(b.created_at);
+        case 'title':
+          return (a.title || '').localeCompare(b.title || '');
+        case 'title-desc':
+          return (b.title || '').localeCompare(a.title || '');
+        case 'score':
+          return (b.score || 0) - (a.score || 0);
+        case 'score-low':
+          return (a.score || 0) - (b.score || 0);
+        default:
+          return new Date(b.created_at) - new Date(a.created_at);
+      }
+    });
   
   return (
     <div className="min-h-screen bg-gray-100">
@@ -1042,6 +1021,15 @@ export default function App() {
               >
                 <RefreshCw size={18} className={scanning ? 'animate-spin' : ''} />
                 {scanning ? 'Scanning...' : 'Scan Emails'}
+              </button>
+
+              <button
+                onClick={handleScoreJobs}
+                disabled={scoring}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                <Star size={18} className={scoring ? 'animate-spin' : ''} />
+                {scoring ? 'Scoring...' : 'Score Jobs'}
               </button>
             </div>
           </div>
@@ -1097,21 +1085,6 @@ export default function App() {
           <>
             <StatsBar stats={stats} />
 
-            {/* Action Bar */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-sm text-gray-600">
-                {jobs.filter(j => j.resume_recommendation).length} of {jobs.length} jobs have resume recommendations
-              </div>
-              <button
-                onClick={handleBatchRecommend}
-                disabled={batchRecommending || jobs.every(j => j.resume_recommendation)}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                <Sparkles size={18} className={batchRecommending ? 'animate-spin' : ''} />
-                {batchRecommending ? `Recommending... (${batchProgress.current}/${batchProgress.total})` : 'Batch Recommend Resumes'}
-              </button>
-            </div>
-
             {/* Filters */}
             <div className="flex items-center gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
@@ -1145,6 +1118,19 @@ export default function App() {
             <option value="80">80+ (Highly Qualified)</option>
             <option value="60">60+ (Good Match)</option>
             <option value="40">40+ (Partial Match)</option>
+          </select>
+
+          <select
+            value={filter.sort}
+            onChange={(e) => setFilter({ ...filter, sort: e.target.value })}
+            className="px-3 py-2 border rounded-lg"
+          >
+            <option value="date">Sort by Date (Newest)</option>
+            <option value="date-oldest">Sort by Date (Oldest)</option>
+            <option value="title">Sort by Title (A-Z)</option>
+            <option value="title-desc">Sort by Title (Z-A)</option>
+            <option value="score">Sort by Score (High-Low)</option>
+            <option value="score-low">Sort by Score (Low-High)</option>
           </select>
         </div>
         

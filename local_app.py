@@ -2220,8 +2220,13 @@ def api_scan():
     
     try:
         for job in jobs:
-            # Check if job already exists in DB
-            existing = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job['job_id'],)).fetchone()
+            # Check if job already exists in DB (by job_id, URL, or company+title)
+            existing = conn.execute("""
+                SELECT 1 FROM jobs
+                WHERE job_id = ?
+                OR url = ?
+                OR (company = ? AND title = ?)
+            """, (job['job_id'], job['url'], job['company'], job['title'])).fetchone()
             if existing:
                 duplicate_count += 1
                 print(f"⏭️  Skipping duplicate: {job['title'][:50]}")
@@ -2300,6 +2305,40 @@ def api_analyze():
     
     conn.close()
     return jsonify({'analyzed': len(jobs)})
+
+@app.route('/api/score-jobs', methods=['POST'])
+def api_score_jobs():
+    """Score all jobs that don't have scores yet based on qualifications and job title match."""
+    resume_text = load_resumes()
+    if not resume_text:
+        return jsonify({'error': 'No resumes found'}), 400
+
+    conn = get_db()
+    # Get jobs that don't have scores yet
+    jobs = [dict(row) for row in conn.execute(
+        "SELECT * FROM jobs WHERE (score = 0 OR score IS NULL) AND is_filtered = 0"
+    ).fetchall()]
+
+    scored_count = 0
+    for job in jobs:
+        try:
+            # Use AI to score the job
+            _, baseline_score, reason = ai_filter_and_score(job, resume_text)
+
+            # Update job with new score
+            conn.execute(
+                "UPDATE jobs SET score = ?, notes = ?, updated_at = ? WHERE job_id = ?",
+                (baseline_score, reason, datetime.now().isoformat(), job['job_id'])
+            )
+            conn.commit()
+            scored_count += 1
+            print(f"✓ Scored: {job['title'][:50]} - Score {baseline_score}")
+        except Exception as e:
+            print(f"Error scoring job {job['job_id']}: {e}")
+            continue
+
+    conn.close()
+    return jsonify({'scored': scored_count, 'total': len(jobs)})
 
 @app.route('/api/scan-followups', methods=['POST'])
 def api_scan_followups():

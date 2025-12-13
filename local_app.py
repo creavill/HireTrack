@@ -40,6 +40,7 @@ from config_loader import get_config
 # Flask web framework for dashboard UI
 from flask import Flask, render_template_string, jsonify, request
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 # Google Gmail API for email scanning
 from google.auth.transport.requests import Request
@@ -52,6 +53,9 @@ from bs4 import BeautifulSoup
 
 # Anthropic Claude AI for job analysis
 import anthropic
+
+# Database backup manager
+from backup_manager import BackupManager, backup_on_startup
 
 # ============== Configuration ==============
 # Load user configuration from config.yaml
@@ -159,6 +163,7 @@ def init_db():
     - watchlist: Companies to monitor for future openings
     - followups: Interview and application follow-up tracking
     - external_applications: Track applications made outside the system
+    - tracked_companies: Companies to track with career page and job alert email
 
     Uses WAL (Write-Ahead Logging) mode for better concurrency when
     multiple processes/threads access the database.
@@ -271,6 +276,18 @@ def init_db():
             reasoning TEXT,
             FOREIGN KEY (resume_id) REFERENCES resume_variants(resume_id),
             FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+        )
+    ''')
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS tracked_companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name TEXT NOT NULL,
+            career_page_url TEXT,
+            job_alert_email TEXT,
+            notes TEXT,
+            created_at TEXT,
+            updated_at TEXT
         )
     ''')
 
@@ -2168,6 +2185,25 @@ def update_job(job_id):
     conn.close()
     return jsonify({'success': True})
 
+@app.route('/api/jobs/<job_id>', methods=['DELETE'])
+def delete_job(job_id):
+    """Delete a job from the database."""
+    conn = get_db()
+
+    # Delete the job
+    conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
+
+    # Also delete any linked external applications
+    conn.execute("DELETE FROM external_applications WHERE job_id = ?", (job_id,))
+
+    # Delete any resume usage logs for this job
+    conn.execute("DELETE FROM resume_usage_log WHERE job_id = ?", (job_id,))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True})
+
 @app.route('/api/scan', methods=['POST'])
 def api_scan():
     """Scan emails with AI filtering and baseline scoring."""
@@ -2713,6 +2749,74 @@ def delete_watchlist(watch_id):
     conn.close()
     return jsonify({'success': True})
 
+# ============== Tracked Companies ==============
+@app.route('/api/tracked-companies', methods=['GET'])
+def get_tracked_companies():
+    """Get all tracked companies ordered by most recently added."""
+    conn = get_db()
+    companies = [dict(row) for row in conn.execute(
+        "SELECT * FROM tracked_companies ORDER BY created_at DESC"
+    ).fetchall()]
+    conn.close()
+    return jsonify({'companies': companies})
+
+@app.route('/api/tracked-companies', methods=['POST'])
+def add_tracked_company():
+    """Add a new tracked company."""
+    data = request.json
+    company_name = data.get('company_name', '').strip()
+    career_page_url = data.get('career_page_url', '').strip()
+    job_alert_email = data.get('job_alert_email', '').strip()
+    notes = data.get('notes', '').strip()
+
+    if not company_name:
+        return jsonify({'error': 'Company name is required'}), 400
+
+    conn = get_db()
+    now = datetime.now().isoformat()
+    conn.execute(
+        """INSERT INTO tracked_companies
+           (company_name, career_page_url, job_alert_email, notes, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (company_name, career_page_url, job_alert_email, notes, now, now)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/tracked-companies/<int:company_id>', methods=['PATCH'])
+def update_tracked_company(company_id):
+    """Update a tracked company."""
+    data = request.json
+    company_name = data.get('company_name', '').strip()
+    career_page_url = data.get('career_page_url', '').strip()
+    job_alert_email = data.get('job_alert_email', '').strip()
+    notes = data.get('notes', '').strip()
+
+    if not company_name:
+        return jsonify({'error': 'Company name is required'}), 400
+
+    conn = get_db()
+    now = datetime.now().isoformat()
+    conn.execute(
+        """UPDATE tracked_companies
+           SET company_name = ?, career_page_url = ?, job_alert_email = ?, notes = ?, updated_at = ?
+           WHERE id = ?""",
+        (company_name, career_page_url, job_alert_email, notes, now, company_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/tracked-companies/<int:company_id>', methods=['DELETE'])
+def delete_tracked_company(company_id):
+    """Delete a tracked company."""
+    conn = get_db()
+    conn.execute("DELETE FROM tracked_companies WHERE id = ?", (company_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
 # ============== External Applications ==============
 @app.route('/api/external-applications', methods=['GET'])
 def get_external_applications():
@@ -3000,6 +3104,107 @@ def create_resume():
         print(f"[Backend] Error creating resume: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/resumes/upload', methods=['POST'])
+def upload_resume():
+    """
+    Upload a resume file (PDF, TXT, or MD) and extract text.
+    """
+    print("[Backend] POST /api/resumes/upload")
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # Validate file extension
+    allowed_extensions = {'.pdf', '.txt', '.md'}
+    filename = secure_filename(file.filename)
+    file_ext = os.path.splitext(filename)[1].lower()
+
+    if file_ext not in allowed_extensions:
+        return jsonify({'error': f'Invalid file type. Only PDF, TXT, MD allowed'}), 400
+
+    try:
+        # Extract text based on file type
+        if file_ext == '.pdf':
+            # Try to extract PDF text
+            try:
+                from pypdf import PdfReader
+                pdf_reader = PdfReader(file)
+                text_parts = []
+                for page in pdf_reader.pages:
+                    text_parts.append(page.extract_text())
+                resume_text = '\n\n'.join(text_parts)
+
+                if not resume_text.strip():
+                    return jsonify({'error': 'Could not extract text from PDF. It may be scanned or image-based.'}), 400
+
+            except ImportError:
+                return jsonify({
+                    'error': 'PDF support not installed. Install with: pip install pypdf',
+                    'hint': 'For now, please copy text from PDF and use "Paste Text" mode'
+                }), 400
+            except Exception as e:
+                return jsonify({'error': f'PDF extraction failed: {str(e)}'}), 400
+        else:
+            # Text or Markdown file
+            resume_text = file.read().decode('utf-8')
+
+        # Get metadata from form
+        name = request.form.get('name', filename.rsplit('.', 1)[0])
+        focus_areas = request.form.get('focus_areas', '')
+        target_roles = request.form.get('target_roles', '')
+
+        # Generate ID and hash
+        resume_id = str(uuid.uuid4())[:16]
+        content_hash = hashlib.sha256(resume_text.encode()).hexdigest()
+        now = datetime.now().isoformat()
+
+        conn = get_db()
+
+        # Check for duplicate content
+        existing = conn.execute(
+            "SELECT resume_id, name FROM resume_variants WHERE content_hash = ?",
+            (content_hash,)
+        ).fetchone()
+
+        if existing:
+            conn.close()
+            return jsonify({
+                'error': f'This resume already exists as "{existing["name"]}"',
+                'existing_id': existing['resume_id']
+            }), 409
+
+        # Insert new resume
+        conn.execute('''
+            INSERT INTO resume_variants (
+                resume_id, name, focus_areas, target_roles, file_path,
+                content, content_hash, created_at, updated_at, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ''', (resume_id, name, focus_areas, target_roles, filename,
+              resume_text, content_hash, now, now))
+
+        conn.commit()
+        conn.close()
+
+        print(f"[Backend] Uploaded resume: {name} ({len(resume_text)} chars)")
+        return jsonify({
+            'success': True,
+            'resume_id': resume_id,
+            'name': name,
+            'text_length': len(resume_text),
+            'pages_extracted': resume_text.count('\n\n') + 1 if file_ext == '.pdf' else 1
+        })
+
+    except Exception as e:
+        print(f"[Backend] Error uploading resume: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/resumes/<resume_id>', methods=['PATCH'])
 def update_resume(resume_id):
     """Update resume metadata (not content - that requires new variant)."""
@@ -3259,10 +3464,428 @@ def batch_recommend_resumes():
         }
     })
 
+@app.route('/api/research-jobs', methods=['POST'])
+def research_jobs():
+    """
+    Use Claude AI to research and recommend jobs based on user's resume and location preferences.
+    Generates 5-10 job recommendations with company names, roles, and why they're a good fit.
+    """
+    print("[Backend] POST /api/research-jobs - Starting Claude job research")
+
+    try:
+        # Load resumes from database
+        resumes = load_resumes_from_db()
+        if not resumes:
+            return jsonify({'error': 'No resumes found in database'}), 400
+
+        # Combine resume content
+        resume_text = "\n\n---RESUME VARIANT---\n\n".join([
+            f"{r['name']}\nFocus: {r.get('focus_areas', 'N/A')}\n\n{r['content']}"
+            for r in resumes
+        ])
+
+        # Get location preferences from config
+        primary_locations = [loc['name'] for loc in CONFIG.primary_locations]
+
+        # Get experience level and preferences
+        exp_level_dict = CONFIG.experience_level
+        exp_level = exp_level_dict.get('current_level', 'mid')
+        min_years = exp_level_dict.get('min_years', 1)
+        max_years = exp_level_dict.get('max_years', 5)
+
+        # Create research prompt
+        research_prompt = f"""You are a job search research assistant. Based on the candidate's resume and preferences, recommend 5-10 specific job opportunities they should pursue.
+
+CANDIDATE'S RESUME:
+{resume_text[:10000]}
+
+LOCATION PREFERENCES:
+Primary locations: {', '.join(primary_locations)}
+
+EXPERIENCE LEVEL:
+Current level: {exp_level}
+Years of experience: {min_years}-{max_years}
+
+TASK:
+Research and recommend 5-10 specific job opportunities that:
+1. Match the candidate's skills and experience level
+2. Are in their preferred locations (especially remote opportunities)
+3. Are realistic and currently in-demand roles
+4. Align with their career trajectory
+
+For each job recommendation, provide:
+- Company name (real companies that commonly hire for these roles)
+- Job title
+- Why it's a good fit (2-3 specific reasons based on their resume)
+- Key skills from their resume that match
+- Estimated match score (0-100)
+
+Return ONLY a valid JSON array with this structure:
+[
+  {{
+    "company": "Company Name",
+    "title": "Job Title",
+    "location": "Location",
+    "why_good_fit": "Specific reasons why this role matches their background...",
+    "matching_skills": ["skill1", "skill2", "skill3"],
+    "match_score": 85,
+    "job_type": "Full-time",
+    "suggested_search_query": "Backend Engineer Python AWS remote"
+  }}
+]
+
+Focus on real, reputable companies and current in-demand roles. Be specific and actionable."""
+
+        # Call Claude API
+        client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
+        response = client.messages.create(
+            model=CONFIG.ai_model or "claude-sonnet-4-20250514",
+            max_tokens=4000,
+            temperature=0.7,
+            messages=[{
+                "role": "user",
+                "content": research_prompt
+            }]
+        )
+
+        # Parse response
+        response_text = response.content[0].text.strip()
+
+        # Extract JSON from response
+        if '```json' in response_text:
+            response_text = response_text.split('```json')[1].split('```')[0].strip()
+        elif '```' in response_text:
+            response_text = response_text.split('```')[1].split('```')[0].strip()
+
+        recommendations = json.loads(response_text)
+
+        print(f"[Backend] Claude generated {len(recommendations)} job recommendations")
+
+        # Save recommendations to database as "researched" jobs
+        conn = get_db()
+        saved_jobs = []
+        now = datetime.now().isoformat()
+
+        for rec in recommendations[:10]:  # Limit to 10
+            # Generate job ID
+            job_id = hashlib.sha256(
+                f"{rec['company']}:{rec['title']}:claude_research".encode()
+            ).hexdigest()[:16]
+
+            # Check if already exists
+            existing = conn.execute(
+                "SELECT job_id FROM jobs WHERE job_id = ?",
+                (job_id,)
+            ).fetchone()
+
+            if existing:
+                print(f"[Backend] Skipping duplicate: {rec['title']} at {rec['company']}")
+                continue
+
+            # Create analysis JSON
+            analysis = {
+                'qualification_score': rec.get('match_score', 80),
+                'should_apply': True,
+                'strengths': rec.get('matching_skills', []),
+                'gaps': [],
+                'recommendation': rec.get('why_good_fit', ''),
+                'resume_to_use': resumes[0]['name'] if resumes else 'default'
+            }
+
+            # Insert into database
+            conn.execute('''
+                INSERT INTO jobs (
+                    job_id, title, company, location, url, source,
+                    status, score, baseline_score, analysis, raw_text,
+                    created_at, updated_at, is_filtered
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                job_id,
+                rec['title'],
+                rec['company'],
+                rec.get('location', primary_locations[0] if primary_locations else 'Remote'),
+                f"https://www.google.com/search?q={rec.get('suggested_search_query', rec['title'] + ' ' + rec['company']).replace(' ', '+')}",
+                'claude_research',
+                'new',
+                rec.get('match_score', 80),
+                rec.get('match_score', 80),
+                json.dumps(analysis),
+                rec.get('why_good_fit', ''),
+                now,
+                now,
+                0
+            ))
+
+            saved_jobs.append({
+                'job_id': job_id,
+                'title': rec['title'],
+                'company': rec['company'],
+                'score': rec.get('match_score', 80)
+            })
+
+        conn.commit()
+        conn.close()
+
+        print(f"[Backend] Saved {len(saved_jobs)} new research jobs to database")
+
+        return jsonify({
+            'success': True,
+            'jobs_found': len(recommendations),
+            'jobs_saved': len(saved_jobs),
+            'saved_jobs': saved_jobs
+        })
+
+    except Exception as e:
+        print(f"[Backend] Error in job research: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Research failed: {str(e)}'}), 500
+
+@app.route('/api/research-jobs/<resume_id>', methods=['POST'])
+def research_jobs_for_resume(resume_id):
+    """
+    Research jobs tailored specifically to a single resume.
+    Uses Claude AI to find 5-10 jobs that match this resume's focus areas and target roles.
+    """
+    print(f"[Backend] POST /api/research-jobs/{resume_id}")
+
+    try:
+        conn = get_db()
+
+        # Get the resume
+        resume = conn.execute(
+            "SELECT * FROM resume_variants WHERE resume_id = ? AND is_active = 1",
+            (resume_id,)
+        ).fetchone()
+
+        if not resume:
+            return jsonify({'error': 'Resume not found'}), 404
+
+        resume_name = resume['name']
+        resume_content = resume['content']
+        focus_areas = resume['focus_areas'] or 'Not specified'
+        target_roles = resume['target_roles'] or 'Not specified'
+
+        print(f"[Backend] Researching jobs for resume: {resume_name}")
+        print(f"  Focus areas: {focus_areas}")
+        print(f"  Target roles: {target_roles}")
+
+        # Build research prompt tailored to this specific resume
+        research_prompt = f"""You are a job search assistant. Research and recommend specific job opportunities for a candidate based on their resume.
+
+CANDIDATE'S RESUME:
+{resume_content[:3000]}
+
+FOCUS AREAS: {focus_areas}
+TARGET ROLES: {target_roles}
+
+LOCATION PREFERENCES:
+Primary locations: {', '.join([loc.get('name', '') for loc in CONFIG.preferences.get('locations', {}).get('primary', [])])}
+
+TASK:
+Research and recommend 5-10 specific job opportunities that:
+1. Match this resume's specific skills and experience
+2. Align with the focus areas: {focus_areas}
+3. Match target roles: {target_roles}
+4. Are in preferred locations (especially remote opportunities)
+5. Are realistic and currently in-demand roles
+
+For each job recommendation, provide:
+- Company name (real companies that commonly hire for these roles)
+- Job title
+- Why it's a perfect fit for THIS specific resume (2-3 reasons citing actual resume content)
+- Key skills from this resume that match
+- Estimated match score (0-100)
+
+Return ONLY a valid JSON array with this structure:
+[
+  {{
+    "company": "Company Name",
+    "title": "Job Title",
+    "location": "Location",
+    "why_good_fit": "Specific reasons why this role matches THIS resume...",
+    "matching_skills": ["skill1", "skill2", "skill3"],
+    "match_score": 85,
+    "job_type": "Full-time",
+    "suggested_search_query": "Specific query to find this type of role"
+  }}
+]
+
+Focus on roles that specifically match the focus areas and target roles for THIS resume."""
+
+        # Call Claude API
+        client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
+        response = client.messages.create(
+            model=CONFIG.ai_model or "claude-sonnet-4-20250514",
+            max_tokens=4000,
+            temperature=0.7,
+            messages=[{
+                "role": "user",
+                "content": research_prompt
+            }]
+        )
+
+        # Parse response
+        response_text = response.content[0].text.strip()
+
+        # Extract JSON from response
+        if '```json' in response_text:
+            response_text = response_text.split('```json')[1].split('```')[0].strip()
+        elif '```' in response_text:
+            response_text = response_text.split('```')[1].split('```')[0].strip()
+
+        recommendations = json.loads(response_text)
+
+        print(f"[Backend] Claude generated {len(recommendations)} job recommendations for {resume_name}")
+
+        # Save recommendations to database
+        saved_jobs = []
+        now = datetime.now().isoformat()
+
+        for rec in recommendations[:10]:  # Limit to 10
+            # Generate job ID
+            job_id = hashlib.sha256(
+                f"{rec['company']}:{rec['title']}:resume_{resume_id}".encode()
+            ).hexdigest()[:16]
+
+            # Check if already exists
+            existing = conn.execute(
+                "SELECT job_id FROM jobs WHERE job_id = ?",
+                (job_id,)
+            ).fetchone()
+
+            if existing:
+                print(f"[Backend] Skipping duplicate: {rec['title']} at {rec['company']}")
+                continue
+
+            # Create analysis JSON
+            analysis = {
+                'qualification_score': rec.get('match_score', 80),
+                'should_apply': True,
+                'strengths': rec.get('matching_skills', []),
+                'gaps': [],
+                'recommendation': rec.get('why_good_fit', ''),
+                'resume_to_use': resume_name
+            }
+
+            # Insert into database
+            conn.execute('''
+                INSERT INTO jobs (
+                    job_id, title, company, location, url, source,
+                    status, score, baseline_score, analysis, raw_text,
+                    created_at, updated_at, is_filtered
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            ''', (
+                job_id,
+                rec['title'],
+                rec['company'],
+                rec.get('location', 'Remote'),
+                f"https://www.google.com/search?q={rec.get('suggested_search_query', rec['title']).replace(' ', '+')}+jobs",
+                f'claude_research_{resume_name}',
+                'new',
+                rec.get('match_score', 80),
+                rec.get('match_score', 80),
+                json.dumps(analysis),
+                json.dumps(rec),
+                now,
+                now
+            ))
+
+            saved_jobs.append({
+                'title': rec['title'],
+                'company': rec['company'],
+                'score': rec.get('match_score', 80)
+            })
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'jobs_found': len(recommendations),
+            'jobs_saved': len(saved_jobs),
+            'resume_name': resume_name,
+            'saved_jobs': saved_jobs
+        })
+
+    except Exception as e:
+        print(f"[Backend] Error in resume-specific job research: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Research failed: {str(e)}'}), 500
+
+# ============== Backup API Routes ==============
+
+@app.route('/api/backup/create', methods=['POST'])
+def api_create_backup():
+    """Create a manual database backup."""
+    try:
+        backup_manager = BackupManager(DB_PATH, max_backups=10)
+        backup_path = backup_manager.create_backup()
+
+        if backup_path:
+            return jsonify({
+                'success': True,
+                'message': 'Backup created successfully',
+                'filename': backup_path.name,
+                'path': str(backup_path)
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to create backup'
+            }), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/backup/list', methods=['GET'])
+def api_list_backups():
+    """List all available backups."""
+    try:
+        backup_manager = BackupManager(DB_PATH)
+        backups = backup_manager.list_backups()
+        stats = backup_manager.get_backup_stats()
+
+        return jsonify({
+            'backups': backups,
+            'stats': stats
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/backup/restore/<filename>', methods=['POST'])
+def api_restore_backup(filename):
+    """Restore database from a backup file."""
+    try:
+        backup_manager = BackupManager(DB_PATH)
+        success = backup_manager.restore_backup(filename)
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Database restored from {filename}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Restore failed'
+            }), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Initialize database
     init_db()
     RESUMES_DIR.mkdir(exist_ok=True)
+
+    # Create automatic backup on startup
+    print("🔄 Creating automatic backup...")
+    if backup_on_startup(DB_PATH, max_backups=10):
+        print("✅ Backup created successfully")
+    else:
+        print("⚠️  Backup skipped (database may not exist yet)")
 
     # Migrate existing resumes from files to database
     try:

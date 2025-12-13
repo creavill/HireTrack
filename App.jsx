@@ -62,7 +62,7 @@ function StatusBadge({ status, onChange, statusConfig }) {
   );
 }
 
-function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, expanded, onToggle }) {
+function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, onDelete, expanded, onToggle }) {
   const analysis = job.analysis || {};
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
 
@@ -86,10 +86,7 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div
-        className="p-4 cursor-pointer hover:bg-gray-50"
-        onClick={onToggle}
-      >
+      <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -207,7 +204,7 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
             >
               <ExternalLink size={14} /> View Job
             </a>
-            
+
             {!job.cover_letter && (
               <button
                 onClick={(e) => { e.stopPropagation(); onGenerateCoverLetter(job.job_id); }}
@@ -216,6 +213,13 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
                 <FileText size={14} /> Generate Cover Letter
               </button>
             )}
+
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(job.job_id); }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700 ml-auto"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
           </div>
           
           <div className="text-xs text-gray-400">
@@ -247,7 +251,16 @@ function StatsBar({ stats }) {
   );
 }
 
-function ResumeCard({ resume, onEdit, onDelete, expanded, onToggle }) {
+function ResumeCard({ resume, onEdit, onDelete, onResearch, expanded, onToggle }) {
+  const [researching, setResearching] = useState(false);
+
+  const handleResearch = async (e) => {
+    e.stopPropagation();
+    setResearching(true);
+    await onResearch(resume.resume_id, resume.name);
+    setResearching(false);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       <div
@@ -273,6 +286,14 @@ function ResumeCard({ resume, onEdit, onDelete, expanded, onToggle }) {
               Used {resume.usage_count || 0}x
             </span>
             <div className="flex gap-1">
+              <button
+                onClick={handleResearch}
+                disabled={researching}
+                className="p-1.5 text-purple-600 hover:bg-purple-50 rounded disabled:opacity-50"
+                title="Find jobs for this resume"
+              >
+                {researching ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(resume); }}
                 className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
@@ -315,31 +336,90 @@ function ResumeUploadModal({ onClose, onSave }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploadMode, setUploadMode] = useState('paste'); // 'paste' or 'file'
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+      // Auto-fill name from filename if empty
+      if (!formData.name) {
+        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+        setFormData({ ...formData, name: nameWithoutExt });
+      }
+
+      // Read file content for preview (text files only for now)
+      if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setFormData({ ...formData, content: event.target.result });
+        };
+        reader.readAsText(file);
+      } else {
+        setFormData({ ...formData, content: `[${file.name} - Text will be extracted on upload]` });
+      }
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (!formData.name || !formData.content) {
-      setError('Name and content are required');
+    // Validate based on upload mode
+    if (uploadMode === 'file' && !selectedFile) {
+      setError('Please select a file to upload');
+      return;
+    }
+    if (uploadMode === 'paste' && !formData.content) {
+      setError('Please paste resume content');
+      return;
+    }
+    if (!formData.name) {
+      setError('Resume name is required');
       return;
     }
 
     setSaving(true);
     try {
-      const response = await fetch(`${API_BASE}/resumes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
+      // Use different endpoints based on mode
+      if (uploadMode === 'file') {
+        // File upload mode - use FormData
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', selectedFile);
+        uploadFormData.append('name', formData.name);
+        uploadFormData.append('focus_areas', formData.focus_areas);
+        uploadFormData.append('target_roles', formData.target_roles);
 
-      const data = await response.json();
+        const response = await fetch(`${API_BASE}/resumes/upload`, {
+          method: 'POST',
+          body: uploadFormData
+        });
 
-      if (response.ok) {
-        onSave();
-        onClose();
+        const data = await response.json();
+
+        if (response.ok) {
+          onSave();
+          onClose();
+        } else {
+          setError(data.error || 'Failed to upload resume');
+        }
       } else {
-        setError(data.error || 'Failed to save resume');
+        // Paste mode - use JSON
+        const response = await fetch(`${API_BASE}/resumes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          onSave();
+          onClose();
+        } else {
+          setError(data.error || 'Failed to save resume');
+        }
       }
     } catch (err) {
       setError('Network error: ' + err.message);
@@ -361,6 +441,60 @@ function ResumeUploadModal({ onClose, onSave }) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Upload Mode Toggle */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setUploadMode('file')}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition ${
+                  uploadMode === 'file'
+                    ? 'bg-white text-gray-900 shadow'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                📎 Upload File
+              </button>
+              <button
+                type="button"
+                onClick={() => setUploadMode('paste')}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition ${
+                  uploadMode === 'paste'
+                    ? 'bg-white text-gray-900 shadow'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                📝 Paste Text
+              </button>
+            </div>
+
+            {/* File Upload Mode */}
+            {uploadMode === 'file' && (
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <Upload size={40} className="mx-auto mb-3 text-gray-400" />
+                <label className="cursor-pointer">
+                  <span className="text-sm text-gray-600">
+                    {selectedFile ? (
+                      <span className="text-green-600 font-medium">
+                        ✓ {selectedFile.name}
+                      </span>
+                    ) : (
+                      <>
+                        Click to upload or drag and drop
+                        <br />
+                        <span className="text-xs text-gray-500">PDF, TXT, or MD files</span>
+                      </>
+                    )}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".pdf,.txt,.md"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Resume Name *
@@ -401,19 +535,22 @@ function ResumeUploadModal({ onClose, onSave }) {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Resume Content *
-              </label>
-              <textarea
-                placeholder="Paste your resume text here..."
-                value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
-                rows={12}
-                required
-              />
-            </div>
+            {/* Paste Mode */}
+            {uploadMode === 'paste' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Resume Content *
+                </label>
+                <textarea
+                  placeholder="Paste your resume text here..."
+                  value={formData.content}
+                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
+                  rows={12}
+                  required={uploadMode === 'paste'}
+                />
+              </div>
+            )}
 
             <div className="flex gap-3 pt-4">
               <button
@@ -553,15 +690,19 @@ export default function App() {
   const [stats, setStats] = useState({ total: 0, new: 0, interested: 0, applied: 0, avg_score: 0 });
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [researching, setResearching] = useState(false);
   const [expandedJob, setExpandedJob] = useState(null);
   const [filter, setFilter] = useState({ status: '', minScore: 0, search: '' });
-  const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', or 'resumes'
+  const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', 'resumes', or 'companies'
   const [externalApps, setExternalApps] = useState([]);
   const [showAddExternal, setShowAddExternal] = useState(false);
   const [resumes, setResumes] = useState([]);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [batchRecommending, setBatchRecommending] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [trackedCompanies, setTrackedCompanies] = useState([]);
+  const [showAddCompany, setShowAddCompany] = useState(false);
+  const [editingCompany, setEditingCompany] = useState(null);
   
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -606,12 +747,25 @@ export default function App() {
     }
   }, []);
 
+  const fetchTrackedCompanies = useCallback(async () => {
+    console.log('[Frontend] Fetching tracked companies...');
+    try {
+      const res = await fetch(`${API_BASE}/tracked-companies`);
+      const data = await res.json();
+      console.log(`[Frontend] Received ${data.companies?.length || 0} tracked companies`);
+      setTrackedCompanies(data.companies || []);
+    } catch (err) {
+      console.error('[Frontend] Failed to fetch tracked companies:', err);
+    }
+  }, []);
+
   useEffect(() => {
     console.log('[Frontend] Component mounted, fetching initial data...');
     fetchJobs();
     fetchExternalApps();
     fetchResumes();
-  }, [fetchJobs, fetchExternalApps, fetchResumes]);
+    fetchTrackedCompanies();
+  }, [fetchJobs, fetchExternalApps, fetchResumes, fetchTrackedCompanies]);
 
   // Separate effect for polling to avoid recreating interval
   useEffect(() => {
@@ -692,6 +846,83 @@ export default function App() {
     }
   };
 
+  // Tracked Companies handlers (from tracked-companies branch)
+  const handleAddTrackedCompany = async (companyData) => {
+    console.log('[Frontend] Adding tracked company:', companyData);
+    try {
+      await fetch(`${API_BASE}/tracked-companies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(companyData),
+      });
+      console.log('[Frontend] Company added successfully, refreshing list...');
+      fetchTrackedCompanies();
+      setShowAddCompany(false);
+    } catch (err) {
+      console.error('[Frontend] Failed to add company:', err);
+    }
+  };
+
+  const handleUpdateTrackedCompany = async (companyId, companyData) => {
+    console.log(`[Frontend] Updating tracked company ${companyId}:`, companyData);
+    try {
+      await fetch(`${API_BASE}/tracked-companies/${companyId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(companyData),
+      });
+      console.log('[Frontend] Company updated successfully, refreshing list...');
+      fetchTrackedCompanies();
+      setEditingCompany(null);
+    } catch (err) {
+      console.error('[Frontend] Failed to update company:', err);
+    }
+  };
+
+  const handleDeleteTrackedCompany = async (companyId) => {
+    console.log(`[Frontend] Deleting tracked company: ${companyId}`);
+    try {
+      await fetch(`${API_BASE}/tracked-companies/${companyId}`, { method: 'DELETE' });
+      console.log('[Frontend] Company deleted successfully, refreshing list...');
+      fetchTrackedCompanies();
+    } catch (err) {
+      console.error('[Frontend] Failed to delete company:', err);
+    }
+  };
+
+  // Job management handlers (from job-management-features branch)
+  const handleDeleteJob = async (jobId) => {
+    if (!window.confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await fetch(`${API_BASE}/jobs/${jobId}`, { method: 'DELETE' });
+      fetchJobs();
+    } catch (err) {
+      console.error('Delete job failed:', err);
+    }
+  };
+
+  const handleResearchJobs = async () => {
+    setResearching(true);
+    try {
+      const response = await fetch(`${API_BASE}/research-jobs`, { method: 'POST' });
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✨ Claude found ${data.jobs_saved} new job recommendations!`);
+        // Refresh jobs list to show new researched jobs
+        setTimeout(fetchJobs, 2000);
+      } else {
+        alert(`Research failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Job research failed:', err);
+      alert('Job research failed. Check console for details.');
+    }
+    setResearching(false);
+  };
+
   const handleRecommendResume = async (jobId) => {
     console.log(`[Frontend] Getting resume recommendation for job: ${jobId}`);
     try {
@@ -754,6 +985,25 @@ export default function App() {
     }
   };
 
+  const handleResearchForResume = async (resumeId, resumeName) => {
+    console.log(`[Frontend] Researching jobs for resume: ${resumeName}`);
+    try {
+      const response = await fetch(`${API_BASE}/research-jobs/${resumeId}`, { method: 'POST' });
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✨ Claude found ${data.jobs_saved} jobs tailored for "${resumeName}"!`);
+        // Refresh jobs list to show new researched jobs
+        setTimeout(fetchJobs, 2000);
+      } else {
+        alert(`Research failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('[Frontend] Job research failed:', err);
+      alert('Job research failed. Check console for details.');
+    }
+  };
+
   const filteredJobs = jobs.filter(job => {
     if (filter.search) {
       const search = filter.search.toLowerCase();
@@ -774,15 +1024,26 @@ export default function App() {
               <h1 className="text-2xl font-bold text-gray-900">Job Tracker</h1>
               <p className="text-sm text-gray-500">AI-powered job matching</p>
             </div>
-            
-            <button
-              onClick={handleScan}
-              disabled={scanning}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              <RefreshCw size={18} className={scanning ? 'animate-spin' : ''} />
-              {scanning ? 'Scanning...' : 'Scan Emails'}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleResearchJobs}
+                disabled={researching}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                <Sparkles size={18} className={researching ? 'animate-pulse' : ''} />
+                {researching ? 'Researching...' : 'Research Jobs with Claude'}
+              </button>
+
+              <button
+                onClick={handleScan}
+                disabled={scanning}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                <RefreshCw size={18} className={scanning ? 'animate-spin' : ''} />
+                {scanning ? 'Scanning...' : 'Scan Emails'}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -819,6 +1080,16 @@ export default function App() {
             }`}
           >
             📄 Resume Library ({resumes.length})
+          </button>
+          <button
+            onClick={() => setActiveView('companies')}
+            className={`px-4 py-2 rounded-lg font-medium transition ${
+              activeView === 'companies'
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            🏢 Tracked Companies ({trackedCompanies.length})
           </button>
         </div>
 
@@ -891,11 +1162,12 @@ export default function App() {
                   <JobCard
                     key={job.job_id}
                     job={job}
-                    expanded={expandedJob === job.job_id}
-                    onToggle={() => setExpandedJob(expandedJob === job.job_id ? null : job.job_id)}
+                    expanded={true}
+                    onToggle={() => {}}
                     onStatusChange={handleStatusChange}
                     onGenerateCoverLetter={handleGenerateCoverLetter}
                     onRecommendResume={handleRecommendResume}
+                    onDelete={handleDeleteJob}
                   />
                 ))}
               </div>
@@ -951,7 +1223,7 @@ export default function App() {
               </div>
             )}
           </>
-        ) : (
+        ) : activeView === 'resumes' ? (
           <>
             {/* Resumes View */}
             <div className="flex justify-between items-center mb-6">
@@ -1011,10 +1283,250 @@ export default function App() {
                       onToggle={() => setExpandedJob(expandedJob === resume.resume_id ? null : resume.resume_id)}
                       onEdit={() => alert('Edit functionality coming soon!')}
                       onDelete={handleDeleteResume}
+                      onResearch={handleResearchForResume}
                     />
                   ))}
                 </div>
               </>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Tracked Companies View */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">Tracked Companies</h2>
+              <button
+                onClick={() => setShowAddCompany(!showAddCompany)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                <Plus size={18} />
+                {showAddCompany ? 'Cancel' : 'Add Company'}
+              </button>
+            </div>
+
+            {showAddCompany && (
+              <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+                <h3 className="font-semibold mb-4">Add Tracked Company</h3>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.target);
+                  handleAddTrackedCompany({
+                    company_name: formData.get('company_name'),
+                    career_page_url: formData.get('career_page_url'),
+                    job_alert_email: formData.get('job_alert_email'),
+                    notes: formData.get('notes'),
+                  });
+                  e.target.reset();
+                }}>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Company Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="company_name"
+                        required
+                        className="w-full px-3 py-2 border rounded-lg"
+                        placeholder="e.g., Google, Microsoft, Startup Inc."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Career Page URL
+                      </label>
+                      <input
+                        type="url"
+                        name="career_page_url"
+                        className="w-full px-3 py-2 border rounded-lg"
+                        placeholder="https://company.com/careers"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Job Alert Email
+                      </label>
+                      <input
+                        type="email"
+                        name="job_alert_email"
+                        className="w-full px-3 py-2 border rounded-lg"
+                        placeholder="jobs@company.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notes
+                      </label>
+                      <textarea
+                        name="notes"
+                        rows="3"
+                        className="w-full px-3 py-2 border rounded-lg"
+                        placeholder="Add any notes about this company..."
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                      >
+                        Add Company
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCompany(false)}
+                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {trackedCompanies.length === 0 ? (
+              <div className="text-center py-12">
+                <Briefcase size={48} className="mx-auto mb-4 text-gray-300" />
+                <p className="text-gray-500 mb-4">No tracked companies yet.</p>
+                <p className="text-sm text-gray-400 mb-6">
+                  Track companies you're interested in with their career pages and job alert emails.
+                </p>
+                <button
+                  onClick={() => setShowAddCompany(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  <Plus size={20} />
+                  Add Your First Company
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {trackedCompanies.map(company => (
+                  <div key={company.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                    {editingCompany === company.id ? (
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.target);
+                        handleUpdateTrackedCompany(company.id, {
+                          company_name: formData.get('company_name'),
+                          career_page_url: formData.get('career_page_url'),
+                          job_alert_email: formData.get('job_alert_email'),
+                          notes: formData.get('notes'),
+                        });
+                      }}>
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            name="company_name"
+                            defaultValue={company.company_name}
+                            required
+                            className="w-full px-3 py-2 border rounded-lg font-semibold"
+                            placeholder="Company Name"
+                          />
+                          <input
+                            type="url"
+                            name="career_page_url"
+                            defaultValue={company.career_page_url || ''}
+                            className="w-full px-3 py-2 border rounded-lg text-sm"
+                            placeholder="Career Page URL"
+                          />
+                          <input
+                            type="email"
+                            name="job_alert_email"
+                            defaultValue={company.job_alert_email || ''}
+                            className="w-full px-3 py-2 border rounded-lg text-sm"
+                            placeholder="Job Alert Email"
+                          />
+                          <textarea
+                            name="notes"
+                            defaultValue={company.notes || ''}
+                            rows="2"
+                            className="w-full px-3 py-2 border rounded-lg text-sm"
+                            placeholder="Notes"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingCompany(null)}
+                              className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900 text-lg mb-2">{company.company_name}</h3>
+                            <div className="space-y-1 text-sm text-gray-600">
+                              {company.career_page_url && (
+                                <div className="flex items-center gap-2">
+                                  <ExternalLink size={14} />
+                                  <a
+                                    href={company.career_page_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    {company.career_page_url}
+                                  </a>
+                                </div>
+                              )}
+                              {company.job_alert_email && (
+                                <div className="flex items-center gap-2">
+                                  <Mail size={14} />
+                                  <a
+                                    href={`mailto:${company.job_alert_email}`}
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    {company.job_alert_email}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditingCompany(company.id)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                              title="Edit"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete ${company.company_name}?`)) {
+                                  handleDeleteTrackedCompany(company.id);
+                                }
+                              }}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                        {company.notes && (
+                          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-700">{company.notes}</p>
+                          </div>
+                        )}
+                        <div className="mt-3 pt-3 border-t text-xs text-gray-500">
+                          Added: {new Date(company.created_at).toLocaleDateString()}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </>
         )}

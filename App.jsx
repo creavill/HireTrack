@@ -705,13 +705,26 @@ export default function App() {
     }
   }, []);
 
+  const fetchCustomEmailSources = useCallback(async () => {
+    console.log('[Frontend] Fetching custom email sources...');
+    try {
+      const res = await fetch(`${API_BASE}/custom-email-sources`);
+      const data = await res.json();
+      console.log(`[Frontend] Received ${data.sources?.length || 0} custom email sources`);
+      setCustomEmailSources(data.sources || []);
+    } catch (err) {
+      console.error('[Frontend] Failed to fetch custom email sources:', err);
+    }
+  }, []);
+
   useEffect(() => {
     console.log('[Frontend] Component mounted, fetching initial data...');
     fetchJobs();
     fetchExternalApps();
     fetchResumes();
     fetchTrackedCompanies();
-  }, [fetchJobs, fetchExternalApps, fetchResumes, fetchTrackedCompanies]);
+    fetchCustomEmailSources();
+  }, [fetchJobs, fetchExternalApps, fetchResumes, fetchTrackedCompanies, fetchCustomEmailSources]);
 
   // Separate effect for polling to avoid recreating interval
   useEffect(() => {
@@ -825,6 +838,53 @@ export default function App() {
       setShowAddCompany(false);
     } catch (err) {
       console.error('[Frontend] Failed to add company:', err);
+    }
+  };
+
+  // Custom Email Sources handlers
+  const handleAddEmailSource = async (sourceData) => {
+    console.log('[Frontend] Adding custom email source:', sourceData);
+    try {
+      await fetch(`${API_BASE}/custom-email-sources`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sourceData),
+      });
+      console.log('[Frontend] Email source added successfully, refreshing list...');
+      fetchCustomEmailSources();
+      setShowAddEmailSource(false);
+    } catch (err) {
+      console.error('[Frontend] Failed to add email source:', err);
+      alert('Failed to add email source');
+    }
+  };
+
+  const handleToggleEmailSource = async (source) => {
+    try {
+      await fetch(`${API_BASE}/custom-email-sources/${source.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: source.name,
+          sender_email: source.sender_email || '',
+          sender_pattern: source.sender_pattern || '',
+          subject_keywords: source.subject_keywords || '',
+          enabled: source.enabled ? 0 : 1,
+        }),
+      });
+      fetchCustomEmailSources();
+    } catch (err) {
+      console.error('[Frontend] Failed to toggle email source:', err);
+    }
+  };
+
+  const handleDeleteEmailSource = async (sourceId) => {
+    try {
+      await fetch(`${API_BASE}/custom-email-sources/${sourceId}`, { method: 'DELETE' });
+      console.log('[Frontend] Email source deleted successfully, refreshing list...');
+      fetchCustomEmailSources();
+    } catch (err) {
+      console.error('[Frontend] Failed to delete email source:', err);
     }
   };
 
@@ -1099,6 +1159,16 @@ export default function App() {
             }`}
           >
             🗺️ Roadmap
+          </button>
+          <button
+            onClick={() => setActiveView('settings')}
+            className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
+              activeView === 'settings'
+                ? 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-900 shadow-md border-2 border-gray-400'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-100'
+            }`}
+          >
+            ⚙️ Settings
           </button>
         </div>
 
@@ -1804,6 +1874,230 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Settings View */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">⚙️ Settings</h2>
+              <p className="text-gray-600">Configure custom email sources and application preferences</p>
+            </div>
+
+            {/* Custom Email Sources Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-3 border-b border-blue-200">
+                <h3 className="font-bold text-blue-900">📧 Custom Email Sources</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  Add job boards and companies that send you job alerts via email
+                </p>
+              </div>
+
+              <div className="p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <p className="text-sm text-gray-600">
+                    {customEmailSources.length} custom source{customEmailSources.length !== 1 ? 's' : ''} configured
+                  </p>
+                  <button
+                    onClick={() => setShowAddEmailSource(!showAddEmailSource)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Plus size={18} />
+                    {showAddEmailSource ? 'Cancel' : 'Add Email Source'}
+                  </button>
+                </div>
+
+                {/* Add Email Source Form */}
+                {showAddEmailSource && (
+                  <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 mb-4">
+                    <h4 className="font-semibold text-blue-900 mb-3">Add New Email Source</h4>
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.target);
+                      handleAddEmailSource({
+                        name: formData.get('name'),
+                        sender_email: formData.get('sender_email'),
+                        sender_pattern: formData.get('sender_pattern'),
+                        subject_keywords: formData.get('subject_keywords'),
+                      });
+                      e.target.reset();
+                    }}>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Source Name <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="name"
+                            required
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., Stripe Careers, Remote.com Jobs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Sender Email
+                          </label>
+                          <input
+                            type="email"
+                            name="sender_email"
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., careers@stripe.com, jobs@remote.com"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            The exact email address that sends job alerts
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Sender Pattern (Alternative)
+                          </label>
+                          <input
+                            type="text"
+                            name="sender_pattern"
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., noreply@company.com"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Use if emails come from varying senders (one or the other required)
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Subject Keywords (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            name="subject_keywords"
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., job alert, new opportunities, careers"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Comma-separated keywords to match in subject line
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Add Source
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddEmailSource(false)}
+                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* Email Sources List */}
+                {customEmailSources.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Mail size={48} className="mx-auto mb-3 text-gray-300" />
+                    <p className="mb-2">No custom email sources yet</p>
+                    <p className="text-sm text-gray-400">
+                      Add email sources to scan job alerts from any company or job board
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {customEmailSources.map(source => (
+                      <div key={source.id} className="border rounded-lg p-3 flex items-start justify-between hover:bg-gray-50">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-gray-900">{source.name}</h4>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              source.enabled
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {source.enabled ? 'Active' : 'Disabled'}
+                            </span>
+                          </div>
+                          {source.sender_email && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              <Mail size={14} className="inline mr-1" />
+                              From: {source.sender_email}
+                            </p>
+                          )}
+                          {source.sender_pattern && !source.sender_email && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              <Mail size={14} className="inline mr-1" />
+                              Pattern: {source.sender_pattern}
+                            </p>
+                          )}
+                          {source.subject_keywords && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              <Filter size={14} className="inline mr-1" />
+                              Keywords: {source.subject_keywords}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-1">
+                            Added: {new Date(source.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => handleToggleEmailSource(source)}
+                            className={`px-3 py-1 text-sm rounded ${
+                              source.enabled
+                                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            }`}
+                            title={source.enabled ? 'Disable' : 'Enable'}
+                          >
+                            {source.enabled ? 'Disable' : 'Enable'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete "${source.name}"?`)) {
+                                handleDeleteEmailSource(source.id);
+                              }
+                            }}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded"
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Help Text */}
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold text-blue-900 mb-2">💡 How to Use Custom Email Sources</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>1. Find a job alert email in your inbox from the source you want to add</li>
+                    <li>2. Copy the sender's email address (e.g., jobs@company.com)</li>
+                    <li>3. Add it here with a memorable name</li>
+                    <li>4. Run "Scan Emails" to start finding jobs from this source</li>
+                  </ul>
+                  <p className="text-sm text-blue-700 mt-3">
+                    <strong>Tip:</strong> Subject keywords are optional but help filter out non-job emails from the same sender.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Future Settings Sections */}
+            <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6 border border-gray-200 text-center">
+              <p className="text-gray-600">
+                More settings coming soon: notifications, preferences, API keys, and more!
+              </p>
             </div>
           </>
         )}

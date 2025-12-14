@@ -693,6 +693,7 @@ export default function App() {
   });
   const [selectedJobIndex, setSelectedJobIndex] = useState(0);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [toasts, setToasts] = useState([]);
 
   // Update HTML element and localStorage when dark mode changes
   useEffect(() => {
@@ -703,6 +704,15 @@ export default function App() {
     }
     localStorage.setItem('darkMode', darkMode);
   }, [darkMode]);
+
+  // Toast notification system
+  const showToast = useCallback((message, type = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -857,14 +867,17 @@ export default function App() {
 
   const handleScan = async () => {
     setScanning(true);
+    showToast('Scanning emails...', 'info');
     try {
       await fetch(`${API_BASE}/scan`, { method: 'POST' });
+      showToast('Email scan complete! Refreshing jobs...', 'success');
       // Poll for updates after a delay
       setTimeout(fetchJobs, 5000);
       setTimeout(fetchJobs, 15000);
       setTimeout(fetchJobs, 30000);
     } catch (err) {
       console.error('Scan failed:', err);
+      showToast('Scan failed. Please try again.', 'error');
     }
     setScanning(false);
   };
@@ -875,15 +888,15 @@ export default function App() {
       const response = await fetch(`${API_BASE}/score-jobs`, { method: 'POST' });
       const data = await response.json();
       if (data.error) {
-        alert(`Scoring failed: ${data.error}`);
+        showToast(`Scoring failed: ${data.error}`, 'error');
       } else {
-        alert(`✓ Scored ${data.scored} jobs out of ${data.total}`);
+        showToast(`✓ Scored ${data.scored} jobs out of ${data.total}`, 'success');
       }
       // Refresh jobs to show new scores
       setTimeout(fetchJobs, 2000);
     } catch (err) {
       console.error('Scoring failed:', err);
-      alert('Scoring failed. Check console for details.');
+      showToast('Scoring failed. Check console for details.', 'error');
     }
     setScoring(false);
   };
@@ -916,6 +929,7 @@ export default function App() {
       );
     } catch (err) {
       console.error('Notes update failed:', err);
+      showToast('Failed to save notes', 'error');
     }
   };
   
@@ -983,11 +997,12 @@ export default function App() {
         body: JSON.stringify(sourceData),
       });
       console.log('[Frontend] Email source added successfully, refreshing list...');
+      showToast(`✓ Added ${sourceData.name}`, 'success');
       fetchCustomEmailSources();
       setShowAddEmailSource(false);
     } catch (err) {
       console.error('[Frontend] Failed to add email source:', err);
-      alert('Failed to add email source');
+      showToast('Failed to add email source', 'error');
     }
   };
 
@@ -1359,7 +1374,21 @@ export default function App() {
         
             {/* Jobs List */}
             {loading ? (
-              <div className="text-center py-12 text-gray-500">Loading jobs...</div>
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 animate-pulse">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                      </div>
+                      <div className="w-20 h-8 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : filteredJobs.length === 0 ? (
               <div className="text-center py-12">
                 <Briefcase size={48} className="mx-auto mb-4 text-gray-300" />
@@ -2281,6 +2310,27 @@ export default function App() {
           onSave={fetchResumes}
         />
       )}
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`px-4 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 animate-slide-in ${
+              toast.type === 'success' ? 'bg-green-600' :
+              toast.type === 'error' ? 'bg-red-600' :
+              toast.type === 'warning' ? 'bg-yellow-600' :
+              'bg-blue-600'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {toast.type === 'success' && <CheckCircle size={20} />}
+              {toast.type === 'error' && <AlertCircle size={20} />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Keyboard Shortcuts Help Modal */}
       {showShortcutsHelp && (

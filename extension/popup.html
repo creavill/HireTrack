@@ -11,40 +11,82 @@
     body {
       font-family: 'Segoe UI Emoji', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
-      background: #f9fafb;
+      background: linear-gradient(to bottom, #FFF5F9, #FFFFFF);
       display: flex;
       flex-direction: column;
     }
     .header {
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-      color: white;
-      padding: 16px 20px;
+      background: linear-gradient(135deg, #FFC1D9 0%, #FFB3D0 100%);
+      color: #4A1F36;
+      padding: 18px 20px;
       flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(255, 147, 196, 0.2);
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
-    .header h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
-    .header p { font-size: 12px; opacity: 0.9; }
+    .logo {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #FF9EC4, #FFB3D0);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-center;
+      font-size: 24px;
+      box-shadow: 0 2px 8px rgba(255, 147, 196, 0.4);
+    }
+    .header-text h1 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .header-text p {
+      font-size: 12px;
+      opacity: 0.85;
+    }
     .tabs {
       display: flex;
       background: white;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid #FFE5F0;
       flex-shrink: 0;
     }
     .tab {
       flex: 1;
-      padding: 12px;
+      padding: 13px 8px;
       text-align: center;
       cursor: pointer;
       border-bottom: 3px solid transparent;
-      font-weight: 500;
-      font-size: 13px;
+      font-weight: 600;
+      font-size: 12px;
       transition: all 0.2s;
       background: none;
       border-top: none;
       border-left: none;
       border-right: none;
+      color: #6B7280;
     }
-    .tab:hover { background: #f9fafb; }
-    .tab.active { border-bottom-color: #2563eb; color: #2563eb; }
+    .tab:hover { background: linear-gradient(to bottom, #FFF5F9, #FFFFFF); }
+    .tab.active[data-tab="analyze"] {
+      border-bottom-color: #FFC1D9;
+      color: #D946A6;
+      background: linear-gradient(to bottom, #FFF1F7, #FFFFFF);
+    }
+    .tab.active[data-tab="apply"] {
+      border-bottom-color: #C1FFD9;
+      color: #059669;
+      background: linear-gradient(to bottom, #F1FFF7, #FFFFFF);
+    }
+    .tab.active[data-tab="external"] {
+      border-bottom-color: #D9C1FF;
+      color: #7C3AED;
+      background: linear-gradient(to bottom, #F7F1FF, #FFFFFF);
+    }
+    .tab.active[data-tab="questions"] {
+      border-bottom-color: #FFD9C1;
+      color: #EA580C;
+      background: linear-gradient(to bottom, #FFF7F1, #FFFFFF);
+    }
     .content {
       padding: 20px;
       flex: 1;
@@ -55,60 +97,80 @@
     .form-group { margin-bottom: 16px; }
     label {
       display: block;
-      font-weight: 500;
+      font-weight: 600;
       margin-bottom: 6px;
       color: #374151;
       font-size: 13px;
     }
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       padding: 10px 12px;
-      border: 1.5px solid #d1d5db;
-      border-radius: 6px;
+      border: 2px solid #FFD1E6;
+      border-radius: 8px;
       font-size: 13px;
       font-family: inherit;
+      background: white;
+      transition: all 0.2s;
     }
-    input:focus, textarea:focus {
+    input:focus, textarea:focus, select:focus {
       outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      border-color: #FFC1D9;
+      box-shadow: 0 0 0 3px rgba(255, 193, 217, 0.15);
     }
     textarea { resize: vertical; line-height: 1.5; }
     .textarea-small { min-height: 80px; }
     .textarea-medium { min-height: 150px; }
     .textarea-large { min-height: 250px; }
+
     button {
       width: 100%;
-      padding: 12px;
+      padding: 12px 16px;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
       margin-top: 8px;
     }
-    .btn-primary { background: #2563eb; color: white; }
-    .btn-primary:hover:not(:disabled) {
-      background: #1d4ed8;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+
+    .btn-primary {
+      background: linear-gradient(135deg, #FFC1D9 0%, #FFB3D0 100%);
+      color: #4A1F36;
+      box-shadow: 0 2px 6px rgba(255, 147, 196, 0.25);
     }
-    .btn-success { background: #059669; color: white; }
-    .btn-success:hover:not(:disabled) { background: #047857; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #FFB3D0 0%, #FFA3C4 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(255, 147, 196, 0.35);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #C1FFD9 0%, #B3F0CC 100%);
+      color: #1F4A36;
+      box-shadow: 0 2px 6px rgba(147, 255, 196, 0.25);
+    }
+    .btn-success:hover:not(:disabled) {
+      background: linear-gradient(135deg, #B3F0CC 0%, #A3E6BF 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(147, 255, 196, 0.35);
+    }
+
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
     .result-card {
       background: white;
       padding: 16px;
-      border-radius: 8px;
-      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      border: 2px solid #FFE5F0;
       margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(255, 147, 196, 0.1);
     }
     .result-card h3 {
       font-size: 14px;
       font-weight: 600;
-      margin-bottom: 8px;
-      color: #374151;
+      margin-bottom: 10px;
+      color: #4A1F36;
     }
     .result-card pre {
       white-space: pre-wrap;
@@ -117,75 +179,106 @@
       color: #4b5563;
     }
     .copy-btn {
-      padding: 6px 12px;
+      padding: 8px 14px;
       font-size: 12px;
       margin-top: 8px;
       width: auto;
       display: inline-block;
+      background: linear-gradient(135deg, #D9C1FF 0%, #CDB3F0 100%);
+      color: #3E2A5C;
     }
-    .hint { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .copy-btn:hover {
+      background: linear-gradient(135deg, #CDB3F0 0%, #C1A3E6 100%);
+    }
+    .hint {
+      font-size: 11px;
+      color: #9CA3AF;
+      margin-top: 4px;
+      font-style: italic;
+    }
     .score-badge {
       display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
+      padding: 5px 14px;
+      border-radius: 14px;
       font-weight: 600;
       font-size: 12px;
     }
     .status {
       padding: 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 13px;
       margin-top: 12px;
+      border: 2px solid;
     }
-    .status.success { background: #d1fae5; color: #065f46; }
-    .status.error { background: #fee2e2; color: #991b1b; }
-    .question-list { list-style: none; padding: 0; }
+    .status.success {
+      background: #D1FAE5;
+      color: #065F46;
+      border-color: #A7F3D0;
+    }
+    .status.error {
+      background: #FEE2E2;
+      color: #991B1B;
+      border-color: #FECACA;
+    }
+    .question-list {
+      list-style: none;
+      padding: 0;
+    }
     .question-list li {
-      padding: 8px 12px;
-      background: #f9fafb;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, #FFF9F5, #FFFFFF);
       margin-bottom: 8px;
-      border-radius: 4px;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 13px;
+      border: 2px solid #FFE5D9;
+      transition: all 0.2s;
     }
-    .question-list li:hover { background: #f3f4f6; }
+    .question-list li:hover {
+      background: linear-gradient(135deg, #FFF3EB, #FFF9F5);
+      border-color: #FFD9C1;
+      transform: translateX(3px);
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>🐷 Hammy</h1>
-    <p>Your Hire Tracking Assistant</p>
+    <div class="logo">🐹</div>
+    <div class="header-text">
+      <h1>Hammy the Hire Helper</h1>
+      <p>AI-Powered Job Assistant</p>
+    </div>
   </div>
-  
+
   <div class="tabs">
     <button class="tab active" data-tab="analyze">📊 Analyze</button>
     <button class="tab" data-tab="apply">✍️ Apply</button>
     <button class="tab" data-tab="external">📝 Track</button>
     <button class="tab" data-tab="questions">💬 Questions</button>
   </div>
-  
+
   <div class="content">
     <div id="analyze-section" class="section active">
       <div class="form-group">
         <label>Job Title *</label>
         <input type="text" id="title" placeholder="Senior Backend Engineer">
       </div>
-      
+
       <div class="form-group">
         <label>Company</label>
         <input type="text" id="company" placeholder="Company name">
       </div>
-      
+
       <div class="form-group">
         <label>Job Description *</label>
         <textarea id="description" class="textarea-medium" placeholder="Paste full job description..."></textarea>
         <div class="hint">💡 Paste entire posting for best results</div>
       </div>
-      
+
       <button class="btn-primary" id="analyzeBtn">🤖 Analyze Fit</button>
       <div id="analyze-result"></div>
     </div>
-    
+
     <div id="apply-section" class="section">
       <div class="result-card">
         <h3>📄 Cover Letter</h3>
@@ -193,12 +286,12 @@
         <button class="btn-primary copy-btn" id="copyCoverBtn">📋 Copy</button>
         <button class="btn-success" id="generateCoverBtn">✨ Generate</button>
       </div>
-      
+
       <div class="result-card">
         <h3>📎 Recommended Resume</h3>
         <div id="resumeRec">Analyze job first to get recommendation</div>
       </div>
-      
+
       <button class="btn-success" id="markAppliedBtn">✅ Mark as Applied</button>
     </div>
 
@@ -226,7 +319,7 @@
 
       <div class="form-group">
         <label>Application Source *</label>
-        <select id="ext-source" style="width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+        <select id="ext-source">
           <option value="">Select source...</option>
           <option value="cold_email">Cold Email</option>
           <option value="referral">Referral</option>
@@ -239,7 +332,7 @@
 
       <div class="form-group">
         <label>Application Method</label>
-        <select id="ext-method" style="width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+        <select id="ext-method">
           <option value="">Select method...</option>
           <option value="email">Email</option>
           <option value="form">Online Form</option>
@@ -287,17 +380,17 @@
           <li data-question="challenge">Describe a technical challenge</li>
         </ul>
       </div>
-      
+
       <div class="form-group">
         <label>Custom Question</label>
         <textarea id="customQuestion" class="textarea-small" placeholder="Type your own question..."></textarea>
         <button class="btn-primary" id="customQuestionBtn">Generate Answer</button>
       </div>
-      
+
       <div id="answer-result"></div>
     </div>
   </div>
-  
+
   <script src="popup.js"></script>
 </body>
 </html>

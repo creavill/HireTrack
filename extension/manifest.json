@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Hammy - Job Application Assistant",
+  "name": "Hammy the Hire Helper - AI Assistant",
   "version": "1.0",
   "description": "Analyze jobs, generate cover letters, and prepare interview answers with AI",
   "permissions": ["sidePanel", "activeTab"],
   "host_permissions": ["http://localhost:5000/*"],
   "action": {
-    "default_title": "Open Hammy Side Panel"
+    "default_title": "Open Hammy the Hire Helper"
   },
   "side_panel": {
     "default_path": "popup.html"

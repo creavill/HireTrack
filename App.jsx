@@ -1035,7 +1035,7 @@ export default function App() {
               <button
                 onClick={handleScoreJobs}
                 disabled={scoring}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-pink-600 text-white rounded-lg hover:from-pink-600 hover:to-pink-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-300 to-pink-400 text-pink-900 rounded-lg hover:from-pink-400 hover:to-pink-500 shadow-md hover:shadow-lg transition-all disabled:opacity-50 border-2 border-pink-400"
               >
                 <Star size={18} className={scoring ? 'animate-spin' : ''} />
                 {scoring ? 'Scoring...' : 'Score Jobs'}
@@ -1052,8 +1052,8 @@ export default function App() {
             onClick={() => setActiveView('discovered')}
             className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
               activeView === 'discovered'
-                ? 'bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-md'
-                : 'bg-white text-gray-700 hover:bg-pink-50 border border-pink-100'
+                ? 'bg-gradient-to-r from-pink-300 to-pink-400 text-pink-900 shadow-md border-2 border-pink-400'
+                : 'bg-white text-gray-700 hover:bg-pink-50 border-2 border-pink-100'
             }`}
           >
             Discovered Jobs ({jobs.length})
@@ -1062,8 +1062,8 @@ export default function App() {
             onClick={() => setActiveView('external')}
             className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
               activeView === 'external'
-                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md'
-                : 'bg-white text-gray-700 hover:bg-orange-50 border border-orange-100'
+                ? 'bg-gradient-to-r from-emerald-200 to-emerald-300 text-emerald-900 shadow-md border-2 border-emerald-400'
+                : 'bg-white text-gray-700 hover:bg-emerald-50 border-2 border-emerald-100'
             }`}
           >
             External Applications ({externalApps.length})
@@ -1072,8 +1072,8 @@ export default function App() {
             onClick={() => setActiveView('resumes')}
             className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
               activeView === 'resumes'
-                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-md'
-                : 'bg-white text-gray-700 hover:bg-purple-50 border border-purple-100'
+                ? 'bg-gradient-to-r from-purple-200 to-purple-300 text-purple-900 shadow-md border-2 border-purple-400'
+                : 'bg-white text-gray-700 hover:bg-purple-50 border-2 border-purple-100'
             }`}
           >
             📄 Resume Library ({resumes.length})
@@ -1082,8 +1082,8 @@ export default function App() {
             onClick={() => setActiveView('companies')}
             className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
               activeView === 'companies'
-                ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
-                : 'bg-white text-gray-700 hover:bg-green-50 border border-green-100'
+                ? 'bg-gradient-to-r from-amber-200 to-amber-300 text-amber-900 shadow-md border-2 border-amber-400'
+                : 'bg-white text-gray-700 hover:bg-amber-50 border-2 border-amber-100'
             }`}
           >
             🏢 Tracked Companies ({trackedCompanies.length})

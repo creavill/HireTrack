@@ -3,121 +3,182 @@
 <head>
   <style>
     body {
-      width: 320px;
-      padding: 16px;
+      width: 340px;
+      padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
+      background: linear-gradient(to bottom, #FFF5F9, #FFFFFF);
+      margin: 0;
     }
-    h1 {
-      font-size: 18px;
-      margin: 0 0 16px 0;
-      color: #1a1a1a;
+    .header {
+      background: linear-gradient(135deg, #FFC1D9 0%, #FFB3D0 100%);
+      padding: 16px 20px;
+      border-bottom: 3px solid #FFB3D0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #FF9EC4, #FFB3D0);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 2px 8px rgba(255, 147, 196, 0.3);
+    }
+    .header-text h1 {
+      font-size: 17px;
+      margin: 0;
+      color: #4A1F36;
+      font-weight: 700;
+    }
+    .header-text p {
+      font-size: 11px;
+      margin: 2px 0 0 0;
+      color: #7A4F66;
+    }
+    .content {
+      padding: 16px;
     }
     .form-group {
       margin-bottom: 12px;
     }
     label {
       display: block;
-      font-weight: 500;
-      margin-bottom: 4px;
-      color: #333;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #4A1F36;
+      font-size: 12px;
     }
     input, textarea {
       width: 100%;
-      padding: 8px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      padding: 10px 12px;
+      border: 2px solid #FFD1E6;
+      border-radius: 8px;
       box-sizing: border-box;
       font-size: 13px;
+      background: #FFFFFF;
+      transition: all 0.2s;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #FFC1D9;
+      box-shadow: 0 0 0 3px rgba(255, 193, 217, 0.15);
     }
     textarea {
       height: 100px;
       resize: vertical;
+      font-family: inherit;
     }
     button {
       width: 100%;
-      padding: 10px;
-      background: #2563eb;
-      color: white;
+      padding: 11px 14px;
+      background: linear-gradient(135deg, #FFC1D9 0%, #FFB3D0 100%);
+      color: #4A1F36;
       border: none;
-      border-radius: 4px;
+      border-radius: 8px;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
       margin-top: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(255, 147, 196, 0.25);
     }
     button:hover {
-      background: #1d4ed8;
+      background: linear-gradient(135deg, #FFB3D0 0%, #FFA3C4 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(255, 147, 196, 0.35);
+    }
+    button:active {
+      transform: translateY(0);
     }
     button:disabled {
-      background: #93c5fd;
+      background: #FFE5F0;
+      color: #B88DA1;
       cursor: not-allowed;
+      box-shadow: none;
     }
     button.secondary {
-      background: #6b7280;
+      background: linear-gradient(135deg, #C1FFD9 0%, #B3F0CC 100%);
+      color: #1F4A36;
       margin-top: 4px;
+      box-shadow: 0 2px 6px rgba(147, 255, 196, 0.25);
     }
     button.secondary:hover {
-      background: #4b5563;
+      background: linear-gradient(135deg, #B3F0CC 0%, #A3E6BF 100%);
+      box-shadow: 0 4px 12px rgba(147, 255, 196, 0.35);
     }
     .status {
       margin-top: 12px;
-      padding: 8px;
-      border-radius: 4px;
+      padding: 10px 12px;
+      border-radius: 8px;
       font-size: 13px;
       display: none;
     }
     .status.success {
       display: block;
-      background: #d1fae5;
-      color: #065f46;
+      background: #D1FAE5;
+      color: #065F46;
+      border: 2px solid #A7F3D0;
     }
     .status.error {
       display: block;
-      background: #fee2e2;
-      color: #991b1b;
+      background: #FEE2E2;
+      color: #991B1B;
+      border: 2px solid #FECACA;
     }
     .auto-detected {
       font-size: 11px;
-      color: #6b7280;
-      margin-top: 2px;
+      color: #9CA3AF;
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
-  <h1>📋 Capture Job</h1>
-  
-  <div class="form-group">
-    <label>Job Title *</label>
-    <input type="text" id="title" placeholder="Senior Software Engineer">
+  <div class="header">
+    <div class="logo">🐹</div>
+    <div class="header-text">
+      <h1>Hammy the Hire Helper</h1>
+      <p>Quick Job Capture</p>
+    </div>
   </div>
-  
-  <div class="form-group">
-    <label>Company</label>
-    <input type="text" id="company" placeholder="Acme Corp">
+
+  <div class="content">
+    <div class="form-group">
+      <label>Job Title *</label>
+      <input type="text" id="title" placeholder="Senior Software Engineer">
+    </div>
+
+    <div class="form-group">
+      <label>Company</label>
+      <input type="text" id="company" placeholder="Acme Corp">
+    </div>
+
+    <div class="form-group">
+      <label>Location</label>
+      <input type="text" id="location" placeholder="Remote" value="Remote">
+    </div>
+
+    <div class="form-group">
+      <label>URL</label>
+      <input type="text" id="url" readonly>
+      <div class="auto-detected">Auto-detected from current tab</div>
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="description" placeholder="Paste or auto-extract job description..."></textarea>
+    </div>
+
+    <button id="extractBtn" class="secondary">🔍 Extract from Page</button>
+    <button id="captureBtn">💾 Save to Hammy</button>
+
+    <div id="status" class="status"></div>
   </div>
-  
-  <div class="form-group">
-    <label>Location</label>
-    <input type="text" id="location" placeholder="Remote" value="Remote">
-  </div>
-  
-  <div class="form-group">
-    <label>URL</label>
-    <input type="text" id="url" readonly>
-    <div class="auto-detected">Auto-detected from current tab</div>
-  </div>
-  
-  <div class="form-group">
-    <label>Description</label>
-    <textarea id="description" placeholder="Paste or auto-extract job description..."></textarea>
-  </div>
-  
-  <button id="extractBtn" class="secondary">🔍 Extract from Page</button>
-  <button id="captureBtn">💾 Save to Job Tracker</button>
-  
-  <div id="status" class="status"></div>
-  
+
   <script src="popup.js"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Job Tracker Capture",
+  "name": "Hammy the Hire Helper - Job Capture",
   "version": "1.0",
-  "description": "Capture job listings from any page and send to Job Tracker",
+  "description": "Capture job listings from any page and send to Hammy the Hire Helper",
   "permissions": ["activeTab", "scripting"],
   "host_permissions": ["http://localhost:5000/*"],
   "action": {

@@ -62,9 +62,11 @@ function StatusBadge({ status, onChange, statusConfig }) {
   );
 }
 
-function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, onDelete, expanded, onToggle }) {
+function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, onDelete, expanded, onToggle, onUpdateNotes }) {
   const analysis = job.analysis || {};
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
+  const [notes, setNotes] = useState(job.notes || '');
+  const [saveStatus, setSaveStatus] = useState(''); // 'saving' or 'saved'
 
   // Parse resume recommendation if available
   let resumeRec = null;
@@ -82,6 +84,18 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
     setLoadingRecommendation(true);
     await onRecommendResume(job.job_id);
     setLoadingRecommendation(false);
+  };
+
+  const handleNotesChange = (e) => {
+    setNotes(e.target.value);
+  };
+
+  const handleNotesSave = async () => {
+    if (notes === job.notes) return; // No changes
+    setSaveStatus('saving');
+    await onUpdateNotes(job.job_id, notes);
+    setSaveStatus('saved');
+    setTimeout(() => setSaveStatus(''), 2000);
   };
 
   return (
@@ -136,7 +150,27 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
               </pre>
             </div>
           )}
-          
+
+          {/* Notes Section */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-semibold text-gray-700 uppercase">Notes</h4>
+              {saveStatus && (
+                <span className={`text-xs ${saveStatus === 'saving' ? 'text-blue-600' : 'text-green-600'}`}>
+                  {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                </span>
+              )}
+            </div>
+            <textarea
+              value={notes}
+              onChange={handleNotesChange}
+              onBlur={handleNotesSave}
+              placeholder="Add notes, interview dates, key takeaways..."
+              className="w-full px-3 py-2 text-sm border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              rows="3"
+            />
+          </div>
+
           <div className="flex items-center gap-2 pt-2">
             <button
               onClick={(e) => {
@@ -786,6 +820,24 @@ export default function App() {
       console.error('Status update failed:', err);
     }
   };
+
+  const handleUpdateNotes = async (jobId, notes) => {
+    try {
+      await fetch(`${API_BASE}/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+      // Update local state optimistically
+      setJobs(prevJobs =>
+        prevJobs.map(job =>
+          job.job_id === jobId ? { ...job, notes } : job
+        )
+      );
+    } catch (err) {
+      console.error('Notes update failed:', err);
+    }
+  };
   
   const handleGenerateCoverLetter = async (jobId) => {
     try {
@@ -1245,6 +1297,7 @@ export default function App() {
                     onGenerateCoverLetter={handleGenerateCoverLetter}
                     onRecommendResume={handleRecommendResume}
                     onDelete={handleDeleteJob}
+                    onUpdateNotes={handleUpdateNotes}
                   />
                 ))}
               </div>

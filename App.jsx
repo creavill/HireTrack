@@ -637,7 +637,7 @@ export default function App() {
   const [researching, setResearching] = useState(false);
   const [expandedJob, setExpandedJob] = useState(null);
   const [filter, setFilter] = useState({ status: '', minScore: 0, search: '', sort: 'date' });
-  const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', 'resumes', or 'companies'
+  const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', 'resumes', 'companies', or 'roadmap'
   const [externalApps, setExternalApps] = useState([]);
   const [showAddExternal, setShowAddExternal] = useState(false);
   const [resumes, setResumes] = useState([]);
@@ -1088,6 +1088,16 @@ export default function App() {
           >
             🏢 Tracked Companies ({trackedCompanies.length})
           </button>
+          <button
+            onClick={() => setActiveView('roadmap')}
+            className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
+              activeView === 'roadmap'
+                ? 'bg-gradient-to-r from-blue-200 to-blue-300 text-blue-900 shadow-md border-2 border-blue-400'
+                : 'bg-white text-gray-700 hover:bg-blue-50 border-2 border-blue-100'
+            }`}
+          >
+            🗺️ Roadmap
+          </button>
         </div>
 
         {activeView === 'discovered' ? (
@@ -1285,7 +1295,7 @@ export default function App() {
               </>
             )}
           </>
-        ) : (
+        ) : activeView === 'companies' ? (
           <>
             {/* Tracked Companies View */}
             <div className="flex justify-between items-center mb-6">
@@ -1523,6 +1533,276 @@ export default function App() {
                 ))}
               </div>
             )}
+          </>
+        ) : (
+          <>
+            {/* Roadmap View */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">🗺️ Product Roadmap</h2>
+              <p className="text-gray-600">Track feature progress and planned improvements for Hammy the Hire Helper</p>
+            </div>
+
+            {/* Progress Overview */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                <div className="text-3xl font-bold text-green-700">3%</div>
+                <div className="text-sm text-green-800 font-medium">Overall Complete</div>
+              </div>
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                <div className="text-3xl font-bold text-blue-700">31</div>
+                <div className="text-sm text-blue-800 font-medium">Total Features</div>
+              </div>
+              <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-4 border border-pink-200">
+                <div className="text-3xl font-bold text-pink-700">7</div>
+                <div className="text-sm text-pink-800 font-medium">Quick Wins</div>
+              </div>
+            </div>
+
+            {/* Roadmap Sections */}
+            <div className="space-y-6">
+              {/* Critical - Must Have */}
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-red-50 to-red-100 px-4 py-3 border-b border-red-200">
+                  <h3 className="font-bold text-red-900 flex items-center gap-2">
+                    🚨 CRITICAL - Must Have Before Test Users
+                    <span className="text-xs bg-red-200 text-red-800 px-2 py-1 rounded-full">P0</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Authentication & Multi-User Support</div>
+                      <div className="text-xs text-gray-600">User registration, login, session management, user isolation</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2-3 weeks</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Database & Hosting</div>
+                      <div className="text-xs text-gray-600">Migrate to PostgreSQL, deploy backend/frontend, environment management</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 1 week</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">API Key Management</div>
+                      <div className="text-xs text-gray-600">Secure storage, rate limiting, cost tracking, BYOK decision</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 3-5 days</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Gmail OAuth Per User</div>
+                      <div className="text-xs text-gray-600">OAuth flow, token storage, refresh handling per user</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2-3 days</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Domain & SSL</div>
+                      <div className="text-xs text-gray-600">Purchase domain, SSL certificate, configure DNS, update OAuth redirects</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 4 hours</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Wins - In Progress */}
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-3 border-b border-blue-200">
+                  <h3 className="font-bold text-blue-900 flex items-center gap-2">
+                    🎯 Quick Wins - Easy but Impactful
+                    <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">In Progress</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" defaultChecked />
+                    <div className="opacity-60">
+                      <div className="font-medium text-gray-900 line-through">Create Roadmap Page</div>
+                      <div className="text-xs text-green-600">✓ Completed</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Custom Email Sources (User-Defined) ⚡</div>
+                      <div className="text-xs text-gray-600">UI to add custom job board email patterns with AI assistance</div>
+                      <div className="text-xs text-blue-600 mt-1">🔄 Starting Now - Effort: 2-3 days</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Dark Mode</div>
+                      <div className="text-xs text-gray-600">Toggle in settings, respect system preference</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 1 day</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Keyboard Shortcuts</div>
+                      <div className="text-xs text-gray-600">J/K navigation, / search, Enter open, D delete, ? help</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 4 hours</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Job Notes</div>
+                      <div className="text-xs text-gray-600">Quick notes field, interview date, key takeaways</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2 hours</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Better Empty States & Loading</div>
+                      <div className="text-xs text-gray-600">Skeleton loaders, progress bars, toast notifications</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 1 day</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Enhanced Deduplication</div>
+                      <div className="text-xs text-gray-600">Fuzzy matching, show similar jobs, manual merge</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2 days</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* UX/Onboarding */}
+              <div className="bg-white rounded-lg shadow-sm border border-purple-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-50 to-purple-100 px-4 py-3 border-b border-purple-200">
+                  <h3 className="font-bold text-purple-900 flex items-center gap-2">
+                    🎨 UX/Onboarding - High Priority
+                    <span className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full">P1</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Welcome/Onboarding Flow</div>
+                      <div className="text-xs text-gray-600">Landing page, sign up flow, welcome wizard, interactive tutorial</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">How-To Guide / Documentation</div>
+                      <div className="text-xs text-gray-600">/help page with getting started, FAQs, troubleshooting</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Legal & Trust */}
+              <div className="bg-white rounded-lg shadow-sm border border-amber-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-amber-50 to-amber-100 px-4 py-3 border-b border-amber-200">
+                  <h3 className="font-bold text-amber-900 flex items-center gap-2">
+                    📄 Legal & Trust - Required for Test Users
+                    <span className="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded-full">P0</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Privacy Policy</div>
+                      <div className="text-xs text-gray-600">Data collection, usage, third-party services, retention</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Terms of Service</div>
+                      <div className="text-xs text-gray-600">Acceptable use, service availability, liability limitations</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Data Export/Delete (GDPR)</div>
+                      <div className="text-xs text-gray-600">Export button, delete account flow, automated deletion</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feature Improvements */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-4 py-3 border-b border-gray-200">
+                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                    ✨ Feature Improvements - Nice to Have
+                    <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full">P3</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-1 text-sm text-gray-700">
+                  <div>• Advanced Search & Filters (salary, date, company size, keywords)</div>
+                  <div>• Job Application Timeline (visual timeline, Kanban board, funnel analytics)</div>
+                  <div>• Interview Management (scheduler, prep notes, calendar integration)</div>
+                  <div>• Company Intelligence (auto-fetch info, ratings, news, employee connections)</div>
+                  <div>• Networking Tracker (contact management, interaction history, reminders)</div>
+                  <div>• Analytics Dashboard (success rate, response times, application velocity)</div>
+                  <div>• Status Automation (auto-move based on email patterns)</div>
+                  <div>• Email Templates (thank you, follow-up, withdrawal, acceptance)</div>
+                  <div>• Mobile Responsiveness (responsive design, touch-friendly UI)</div>
+                </div>
+              </div>
+
+              {/* View Full Roadmap */}
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200 text-center">
+                <h3 className="font-bold text-blue-900 mb-2">📋 Full Roadmap Document</h3>
+                <p className="text-sm text-blue-800 mb-4">
+                  See the complete roadmap with detailed descriptions, technical approaches, and timelines in the ROADMAP.md file.
+                </p>
+                <a
+                  href="https://github.com/creavill/Henry-the-Hire-Tracker/blob/main/ROADMAP.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <ExternalLink size={16} />
+                  View ROADMAP.md on GitHub
+                </a>
+              </div>
+
+              {/* Current Sprint */}
+              <div className="bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg p-6 border border-pink-200">
+                <h3 className="font-bold text-pink-900 mb-3">🚀 Current Sprint (This Week)</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <CheckCircle size={16} className="text-green-600" />
+                    <span className="font-medium">Create Roadmap Page - DONE</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-blue-600" />
+                    <span className="font-medium">Implement Custom Email Sources UI</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-gray-400" />
+                    <span>Add Dark Mode Toggle</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-gray-400" />
+                    <span>Add Keyboard Shortcuts</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-gray-400" />
+                    <span>Add Job Notes Field</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </main>

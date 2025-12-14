@@ -683,6 +683,22 @@ export default function App() {
   const [editingCompany, setEditingCompany] = useState(null);
   const [customEmailSources, setCustomEmailSources] = useState([]);
   const [showAddEmailSource, setShowAddEmailSource] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Check localStorage or system preference
+    const saved = localStorage.getItem('darkMode');
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  // Update HTML element and localStorage when dark mode changes
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
   
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -1110,8 +1126,8 @@ export default function App() {
     });
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-pink-50">
-      <header className="bg-white shadow-md border-b border-pink-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
+      <header className="bg-white dark:bg-gray-800 shadow-md border-b border-pink-100 dark:border-gray-700 transition-colors duration-200">
         <div className="max-w-6xl mx-auto px-4 py-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1120,10 +1136,10 @@ export default function App() {
                 <span className="text-2xl">🐹</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-pink-600 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-pink-600 dark:from-pink-400 dark:to-purple-400 bg-clip-text text-transparent">
                   Hammy the Hire Helper
                 </h1>
-                <p className="text-sm text-gray-600">AI-powered job matching</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">AI-powered job matching</p>
               </div>
             </div>
 
@@ -1933,8 +1949,45 @@ export default function App() {
           <>
             {/* Settings View */}
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">⚙️ Settings</h2>
-              <p className="text-gray-600">Configure custom email sources and application preferences</p>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">⚙️ Settings</h2>
+              <p className="text-gray-600 dark:text-gray-400">Configure custom email sources and application preferences</p>
+            </div>
+
+            {/* Dark Mode Section */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6 transition-colors duration-200">
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 px-4 py-3 border-b border-purple-200 dark:border-gray-600">
+                <h3 className="font-bold text-purple-900 dark:text-purple-200">🌙 Appearance</h3>
+                <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
+                  Customize how Hammy looks
+                </p>
+              </div>
+
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">Dark Mode</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {darkMode ? 'Currently using dark theme' : 'Currently using light theme'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDarkMode(!darkMode)}
+                    className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                      darkMode ? 'bg-purple-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-200 ${
+                        darkMode ? 'translate-x-7' : 'translate-x-1'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center h-full">
+                        {darkMode ? '🌙' : '☀️'}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Custom Email Sources Section */}

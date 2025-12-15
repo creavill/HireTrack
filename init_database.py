@@ -117,6 +117,21 @@ def init_db():
         )
     ''')
 
+    # Create custom_email_sources table
+    print("Creating 'custom_email_sources' table...")
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS custom_email_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            sender_email TEXT,
+            sender_pattern TEXT,
+            subject_keywords TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    ''')
+
     conn.commit()
 
     # Verify tables were created

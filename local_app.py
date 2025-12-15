@@ -311,6 +311,19 @@ def init_db():
         )
     ''')
 
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS custom_email_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            sender_email TEXT,
+            sender_pattern TEXT,
+            subject_keywords TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    ''')
+
     # Migration: Add job_id column if it doesn't exist
     try:
         conn.execute("SELECT job_id FROM followups LIMIT 1")
@@ -801,14 +814,46 @@ def scan_emails(days_back=7):
         f'from:alert@indeed.com after:{after_date}',
         f'from:no-reply@us.greenhouse-jobs.com after:{after_date}',
         f'from:team@hi.wellfound.com after:{after_date}',
-        
+
         # Generic job board catch-all (job OR career OR position in subject)
         f'(subject:job OR subject:career OR subject:position OR subject:"now hiring") -from:linkedin.com -from:indeed.com -from:greenhouse.io -from:wellfound.com after:{after_date}',
-        
+
         # Follow-ups for Applied tab
         f'(subject:interview OR subject:"next steps" OR subject:update OR subject:"application received" OR subject:confirmation) after:{after_date}',
         f'(subject:unfortunately OR subject:offer OR subject:congratulations OR subject:"thank you for applying") after:{after_date}',
     ]
+
+    # Add custom email sources from database
+    conn_sources = sqlite3.connect(DB_PATH)
+    custom_sources = conn_sources.execute(
+        "SELECT name, sender_email, sender_pattern, subject_keywords FROM custom_email_sources WHERE enabled = 1"
+    ).fetchall()
+    conn_sources.close()
+
+    for source in custom_sources:
+        source_name, sender_email, sender_pattern, subject_keywords = source
+        query_parts = []
+
+        # Add sender filter
+        if sender_email:
+            query_parts.append(f'from:{sender_email}')
+        elif sender_pattern:
+            # Gmail doesn't support wildcards in from, so use the pattern as-is
+            query_parts.append(f'from:{sender_pattern}')
+
+        # Add subject keywords if provided
+        if subject_keywords:
+            keywords = [kw.strip() for kw in subject_keywords.split(',')]
+            subject_part = ' OR '.join([f'subject:{kw}' for kw in keywords if kw])
+            if subject_part:
+                query_parts.append(f'({subject_part})')
+
+        # Combine query parts
+        if query_parts:
+            custom_query = ' '.join(query_parts) + f' after:{after_date}'
+            queries.append(custom_query)
+            print(f"📧 Added custom source: {source_name} -> {custom_query}")
+
     
     all_jobs = []
     seen_job_ids = set()  # Track job_ids to prevent duplicates
@@ -2900,6 +2945,78 @@ def delete_tracked_company(company_id):
     """Delete a tracked company."""
     conn = get_db()
     conn.execute("DELETE FROM tracked_companies WHERE id = ?", (company_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+# ============== Custom Email Sources ==============
+@app.route('/api/custom-email-sources', methods=['GET'])
+def get_custom_email_sources():
+    """Get all custom email sources."""
+    conn = get_db()
+    sources = [dict(row) for row in conn.execute(
+        "SELECT * FROM custom_email_sources ORDER BY created_at DESC"
+    ).fetchall()]
+    conn.close()
+    return jsonify({'sources': sources})
+
+@app.route('/api/custom-email-sources', methods=['POST'])
+def add_custom_email_source():
+    """Add a new custom email source."""
+    data = request.json
+    name = data.get('name', '').strip()
+    sender_email = data.get('sender_email', '').strip()
+    sender_pattern = data.get('sender_pattern', '').strip()
+    subject_keywords = data.get('subject_keywords', '').strip()
+
+    if not name:
+        return jsonify({'error': 'Source name is required'}), 400
+
+    if not sender_email and not sender_pattern:
+        return jsonify({'error': 'Either sender email or pattern is required'}), 400
+
+    conn = get_db()
+    now = datetime.now().isoformat()
+    conn.execute(
+        """INSERT INTO custom_email_sources
+           (name, sender_email, sender_pattern, subject_keywords, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 1, ?, ?)""",
+        (name, sender_email, sender_pattern, subject_keywords, now, now)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/custom-email-sources/<int:source_id>', methods=['PATCH'])
+def update_custom_email_source(source_id):
+    """Update a custom email source."""
+    data = request.json
+    name = data.get('name', '').strip()
+    sender_email = data.get('sender_email', '').strip()
+    sender_pattern = data.get('sender_pattern', '').strip()
+    subject_keywords = data.get('subject_keywords', '').strip()
+    enabled = data.get('enabled', 1)
+
+    if not name:
+        return jsonify({'error': 'Source name is required'}), 400
+
+    conn = get_db()
+    now = datetime.now().isoformat()
+    conn.execute(
+        """UPDATE custom_email_sources
+           SET name = ?, sender_email = ?, sender_pattern = ?, subject_keywords = ?, enabled = ?, updated_at = ?
+           WHERE id = ?""",
+        (name, sender_email, sender_pattern, subject_keywords, enabled, now, source_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/custom-email-sources/<int:source_id>', methods=['DELETE'])
+def delete_custom_email_source(source_id):
+    """Delete a custom email source."""
+    conn = get_db()
+    conn.execute("DELETE FROM custom_email_sources WHERE id = ?", (source_id,))
     conn.commit()
     conn.close()
     return jsonify({'success': True})

@@ -6,7 +6,7 @@ const API_BASE = '/api';
 const STATUS_CONFIG = {
   new: { label: 'New', color: 'bg-gray-100 text-gray-700', icon: Clock },
   interested: { label: 'Interested', color: 'bg-blue-100 text-blue-700', icon: Star },
-  applied: { label: 'Applied', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  applied: { label: 'Applied', color: 'bg-cyan-100 text-cyan-700', icon: CheckCircle },
   interviewing: { label: 'Interviewing', color: 'bg-purple-100 text-purple-700', icon: Briefcase },
   rejected: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: XCircle },
   offer: { label: 'Offer', color: 'bg-yellow-100 text-yellow-700', icon: Star },
@@ -62,9 +62,11 @@ function StatusBadge({ status, onChange, statusConfig }) {
   );
 }
 
-function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, onDelete, expanded, onToggle }) {
+function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume, onDelete, expanded, onToggle, onUpdateNotes, isSelected }) {
   const analysis = job.analysis || {};
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
+  const [notes, setNotes] = useState(job.notes || '');
+  const [saveStatus, setSaveStatus] = useState(''); // 'saving' or 'saved'
 
   // Parse resume recommendation if available
   let resumeRec = null;
@@ -84,8 +86,22 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
     setLoadingRecommendation(false);
   };
 
+  const handleNotesChange = (e) => {
+    setNotes(e.target.value);
+  };
+
+  const handleNotesSave = async () => {
+    if (notes === job.notes) return; // No changes
+    setSaveStatus('saving');
+    await onUpdateNotes(job.job_id, notes);
+    setSaveStatus('saved');
+    setTimeout(() => setSaveStatus(''), 2000);
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className={`bg-white rounded-lg shadow-sm border overflow-hidden ${
+      isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+    }`}>
       <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -112,7 +128,7 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
         <div className="border-t px-4 py-3 bg-gray-50 space-y-3">
           {analysis.strengths?.length > 0 && (
             <div>
-              <h4 className="text-xs font-semibold text-green-700 uppercase mb-1">Strengths</h4>
+              <h4 className="text-xs font-semibold text-cyan-700 uppercase mb-1">Strengths</h4>
               <ul className="text-sm text-gray-700 space-y-1">
                 {analysis.strengths.map((s, i) => <li key={i}>• {s}</li>)}
               </ul>
@@ -136,7 +152,27 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
               </pre>
             </div>
           )}
-          
+
+          {/* Notes Section */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-semibold text-gray-700 uppercase">Notes</h4>
+              {saveStatus && (
+                <span className={`text-xs ${saveStatus === 'saving' ? 'text-blue-600' : 'text-cyan-600'}`}>
+                  {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                </span>
+              )}
+            </div>
+            <textarea
+              value={notes}
+              onChange={handleNotesChange}
+              onBlur={handleNotesSave}
+              placeholder="Add notes, interview dates, key takeaways..."
+              className="w-full px-3 py-2 text-sm border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              rows="3"
+            />
+          </div>
+
           <div className="flex items-center gap-2 pt-2">
             <button
               onClick={(e) => {
@@ -182,7 +218,7 @@ function StatsBar({ stats }) {
         { label: 'Total', value: stats.total, color: 'bg-white border border-gray-200', textColor: 'text-gray-900' },
         { label: 'New', value: stats.new, color: 'bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200', textColor: 'text-gray-900' },
         { label: 'Interested', value: stats.interested, color: 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200', textColor: 'text-blue-900' },
-        { label: 'Applied', value: stats.applied, color: 'bg-gradient-to-br from-green-50 to-green-100 border border-green-200', textColor: 'text-green-900' },
+        { label: 'Applied', value: stats.applied, color: 'bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200', textColor: 'text-cyan-900' },
         { label: 'Avg Score', value: Math.round(stats.avg_score), color: 'bg-gradient-to-br from-pink-100 to-pink-200 border border-pink-300', textColor: 'text-pink-900' },
       ].map(({ label, value, color, textColor }) => (
         <div key={label} className={`${color} rounded-lg p-4 text-center shadow-sm hover:shadow-md transition-shadow`}>
@@ -417,7 +453,7 @@ function ResumeUploadModal({ onClose, onSave }) {
                 <label className="cursor-pointer">
                   <span className="text-sm text-gray-600">
                     {selectedFile ? (
-                      <span className="text-green-600 font-medium">
+                      <span className="text-teal-600 font-medium">
                         ✓ {selectedFile.name}
                       </span>
                     ) : (
@@ -530,7 +566,7 @@ function ExternalApplicationCard({ app, onStatusChange, expanded, onToggle, onDe
   };
 
   const EXTERNAL_STATUS_CONFIG = {
-    applied: { label: 'Applied', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+    applied: { label: 'Applied', color: 'bg-cyan-100 text-cyan-700', icon: CheckCircle },
     interviewing: { label: 'Interviewing', color: 'bg-purple-100 text-purple-700', icon: Briefcase },
     rejected: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: XCircle },
     offer: { label: 'Offer', color: 'bg-yellow-100 text-yellow-700', icon: Star },
@@ -637,7 +673,7 @@ export default function App() {
   const [researching, setResearching] = useState(false);
   const [expandedJob, setExpandedJob] = useState(null);
   const [filter, setFilter] = useState({ status: '', minScore: 0, search: '', sort: 'date' });
-  const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', 'resumes', or 'companies'
+  const [activeView, setActiveView] = useState('discovered'); // 'discovered', 'external', 'resumes', 'companies', 'roadmap', or 'settings'
   const [externalApps, setExternalApps] = useState([]);
   const [showAddExternal, setShowAddExternal] = useState(false);
   const [resumes, setResumes] = useState([]);
@@ -647,6 +683,96 @@ export default function App() {
   const [trackedCompanies, setTrackedCompanies] = useState([]);
   const [showAddCompany, setShowAddCompany] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
+  const [customEmailSources, setCustomEmailSources] = useState([]);
+  const [showAddEmailSource, setShowAddEmailSource] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Check localStorage or system preference
+    const saved = localStorage.getItem('darkMode');
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+  const [selectedJobIndex, setSelectedJobIndex] = useState(0);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  // Update HTML element and localStorage when dark mode changes
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
+
+  // Toast notification system
+  const showToast = useCallback((message, type = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Ignore if typing in input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      // Only apply shortcuts on discovered jobs view
+      if (activeView !== 'discovered') {
+        if (e.key === '?') setShowShortcutsHelp(true);
+        return;
+      }
+
+      const filteredJobsList = jobs.filter(job => {
+        const matchesSearch = !filter.search ||
+          job.title?.toLowerCase().includes(filter.search.toLowerCase()) ||
+          job.company?.toLowerCase().includes(filter.search.toLowerCase());
+        const matchesStatus = !filter.status || job.status === filter.status;
+        const matchesScore = job.score >= filter.minScore;
+        return matchesSearch && matchesStatus && matchesScore;
+      });
+
+      switch(e.key) {
+        case 'j':
+          e.preventDefault();
+          setSelectedJobIndex(prev => Math.min(prev + 1, filteredJobsList.length - 1));
+          break;
+        case 'k':
+          e.preventDefault();
+          setSelectedJobIndex(prev => Math.max(prev - 1, 0));
+          break;
+        case '/':
+          e.preventDefault();
+          document.querySelector('input[placeholder*="Search"]')?.focus();
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (filteredJobsList[selectedJobIndex]) {
+            window.open(filteredJobsList[selectedJobIndex].url, '_blank');
+          }
+          break;
+        case 'd':
+          e.preventDefault();
+          if (filteredJobsList[selectedJobIndex] && confirm('Delete this job?')) {
+            handleDeleteJob(filteredJobsList[selectedJobIndex].job_id);
+            setSelectedJobIndex(prev => Math.max(0, Math.min(prev, filteredJobsList.length - 2)));
+          }
+          break;
+        case '?':
+          e.preventDefault();
+          setShowShortcutsHelp(true);
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [activeView, filter, jobs, selectedJobIndex]);
   
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -703,13 +829,26 @@ export default function App() {
     }
   }, []);
 
+  const fetchCustomEmailSources = useCallback(async () => {
+    console.log('[Frontend] Fetching custom email sources...');
+    try {
+      const res = await fetch(`${API_BASE}/custom-email-sources`);
+      const data = await res.json();
+      console.log(`[Frontend] Received ${data.sources?.length || 0} custom email sources`);
+      setCustomEmailSources(data.sources || []);
+    } catch (err) {
+      console.error('[Frontend] Failed to fetch custom email sources:', err);
+    }
+  }, []);
+
   useEffect(() => {
     console.log('[Frontend] Component mounted, fetching initial data...');
     fetchJobs();
     fetchExternalApps();
     fetchResumes();
     fetchTrackedCompanies();
-  }, [fetchJobs, fetchExternalApps, fetchResumes, fetchTrackedCompanies]);
+    fetchCustomEmailSources();
+  }, [fetchJobs, fetchExternalApps, fetchResumes, fetchTrackedCompanies, fetchCustomEmailSources]);
 
   // Separate effect for polling to avoid recreating interval
   useEffect(() => {
@@ -728,14 +867,17 @@ export default function App() {
 
   const handleScan = async () => {
     setScanning(true);
+    showToast('Scanning emails...', 'info');
     try {
       await fetch(`${API_BASE}/scan`, { method: 'POST' });
+      showToast('Email scan complete! Refreshing jobs...', 'success');
       // Poll for updates after a delay
       setTimeout(fetchJobs, 5000);
       setTimeout(fetchJobs, 15000);
       setTimeout(fetchJobs, 30000);
     } catch (err) {
       console.error('Scan failed:', err);
+      showToast('Scan failed. Please try again.', 'error');
     }
     setScanning(false);
   };
@@ -746,15 +888,15 @@ export default function App() {
       const response = await fetch(`${API_BASE}/score-jobs`, { method: 'POST' });
       const data = await response.json();
       if (data.error) {
-        alert(`Scoring failed: ${data.error}`);
+        showToast(`Scoring failed: ${data.error}`, 'error');
       } else {
-        alert(`✓ Scored ${data.scored} jobs out of ${data.total}`);
+        showToast(`✓ Scored ${data.scored} jobs out of ${data.total}`, 'success');
       }
       // Refresh jobs to show new scores
       setTimeout(fetchJobs, 2000);
     } catch (err) {
       console.error('Scoring failed:', err);
-      alert('Scoring failed. Check console for details.');
+      showToast('Scoring failed. Check console for details.', 'error');
     }
     setScoring(false);
   };
@@ -769,6 +911,25 @@ export default function App() {
       fetchJobs();
     } catch (err) {
       console.error('Status update failed:', err);
+    }
+  };
+
+  const handleUpdateNotes = async (jobId, notes) => {
+    try {
+      await fetch(`${API_BASE}/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+      // Update local state optimistically
+      setJobs(prevJobs =>
+        prevJobs.map(job =>
+          job.job_id === jobId ? { ...job, notes } : job
+        )
+      );
+    } catch (err) {
+      console.error('Notes update failed:', err);
+      showToast('Failed to save notes', 'error');
     }
   };
   
@@ -823,6 +984,54 @@ export default function App() {
       setShowAddCompany(false);
     } catch (err) {
       console.error('[Frontend] Failed to add company:', err);
+    }
+  };
+
+  // Custom Email Sources handlers
+  const handleAddEmailSource = async (sourceData) => {
+    console.log('[Frontend] Adding custom email source:', sourceData);
+    try {
+      await fetch(`${API_BASE}/custom-email-sources`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sourceData),
+      });
+      console.log('[Frontend] Email source added successfully, refreshing list...');
+      showToast(`✓ Added ${sourceData.name}`, 'success');
+      fetchCustomEmailSources();
+      setShowAddEmailSource(false);
+    } catch (err) {
+      console.error('[Frontend] Failed to add email source:', err);
+      showToast('Failed to add email source', 'error');
+    }
+  };
+
+  const handleToggleEmailSource = async (source) => {
+    try {
+      await fetch(`${API_BASE}/custom-email-sources/${source.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: source.name,
+          sender_email: source.sender_email || '',
+          sender_pattern: source.sender_pattern || '',
+          subject_keywords: source.subject_keywords || '',
+          enabled: source.enabled ? 0 : 1,
+        }),
+      });
+      fetchCustomEmailSources();
+    } catch (err) {
+      console.error('[Frontend] Failed to toggle email source:', err);
+    }
+  };
+
+  const handleDeleteEmailSource = async (sourceId) => {
+    try {
+      await fetch(`${API_BASE}/custom-email-sources/${sourceId}`, { method: 'DELETE' });
+      console.log('[Frontend] Email source deleted successfully, refreshing list...');
+      fetchCustomEmailSources();
+    } catch (err) {
+      console.error('[Frontend] Failed to delete email source:', err);
     }
   };
 
@@ -996,20 +1205,20 @@ export default function App() {
     });
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-pink-50">
-      <header className="bg-white shadow-md border-b border-pink-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
+      <header className="bg-white dark:bg-gray-800 shadow-md border-b border-pink-100 dark:border-gray-700 transition-colors duration-200">
         <div className="max-w-6xl mx-auto px-4 py-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Logo placeholder - add your logo here */}
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-400 to-pink-500 flex items-center justify-center shadow-lg">
-                <span className="text-2xl">🐹</span>
+                <span className="text-2xl">🐷</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-pink-600 bg-clip-text text-transparent">
-                  Hammy the Hire Helper
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-pink-600 dark:from-pink-400 dark:to-purple-400 bg-clip-text text-transparent">
+                  Henry the Hire Tracker
                 </h1>
-                <p className="text-sm text-gray-600">AI-powered job matching</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">AI-powered job matching</p>
               </div>
             </div>
 
@@ -1088,6 +1297,26 @@ export default function App() {
           >
             🏢 Tracked Companies ({trackedCompanies.length})
           </button>
+          <button
+            onClick={() => setActiveView('roadmap')}
+            className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
+              activeView === 'roadmap'
+                ? 'bg-gradient-to-r from-blue-200 to-blue-300 text-blue-900 shadow-md border-2 border-blue-400'
+                : 'bg-white text-gray-700 hover:bg-blue-50 border-2 border-blue-100'
+            }`}
+          >
+            🗺️ Roadmap
+          </button>
+          <button
+            onClick={() => setActiveView('settings')}
+            className={`px-4 py-2 rounded-lg font-medium transition shadow-sm ${
+              activeView === 'settings'
+                ? 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-900 shadow-md border-2 border-gray-400'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-100'
+            }`}
+          >
+            ⚙️ Settings
+          </button>
         </div>
 
         {activeView === 'discovered' ? (
@@ -1145,7 +1374,21 @@ export default function App() {
         
             {/* Jobs List */}
             {loading ? (
-              <div className="text-center py-12 text-gray-500">Loading jobs...</div>
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 animate-pulse">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                      </div>
+                      <div className="w-20 h-8 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : filteredJobs.length === 0 ? (
               <div className="text-center py-12">
                 <Briefcase size={48} className="mx-auto mb-4 text-gray-300" />
@@ -1153,7 +1396,7 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredJobs.map(job => (
+                {filteredJobs.map((job, index) => (
                   <JobCard
                     key={job.job_id}
                     job={job}
@@ -1163,6 +1406,8 @@ export default function App() {
                     onGenerateCoverLetter={handleGenerateCoverLetter}
                     onRecommendResume={handleRecommendResume}
                     onDelete={handleDeleteJob}
+                    onUpdateNotes={handleUpdateNotes}
+                    isSelected={index === selectedJobIndex}
                   />
                 ))}
               </div>
@@ -1285,14 +1530,14 @@ export default function App() {
               </>
             )}
           </>
-        ) : (
+        ) : activeView === 'companies' ? (
           <>
             {/* Tracked Companies View */}
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-gray-900">Tracked Companies</h2>
               <button
                 onClick={() => setShowAddCompany(!showAddCompany)}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
               >
                 <Plus size={18} />
                 {showAddCompany ? 'Cancel' : 'Add Company'}
@@ -1362,7 +1607,7 @@ export default function App() {
                     <div className="flex gap-2">
                       <button
                         type="submit"
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                        className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                       >
                         Add Company
                       </button>
@@ -1388,7 +1633,7 @@ export default function App() {
                 </p>
                 <button
                   onClick={() => setShowAddCompany(true)}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                 >
                   <Plus size={20} />
                   Add Your First Company
@@ -1442,7 +1687,7 @@ export default function App() {
                           <div className="flex gap-2">
                             <button
                               type="submit"
-                              className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                              className="px-3 py-1.5 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700"
                             >
                               Save
                             </button>
@@ -1524,6 +1769,537 @@ export default function App() {
               </div>
             )}
           </>
+        ) : activeView === 'roadmap' ? (
+          <>
+            {/* Roadmap View */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">🗺️ Product Roadmap</h2>
+              <p className="text-gray-600 dark:text-gray-400">Track feature progress and planned improvements for Henry the Hire Tracker</p>
+            </div>
+
+            {/* Progress Overview */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-4 border border-teal-200">
+                <div className="text-3xl font-bold text-teal-700">3%</div>
+                <div className="text-sm text-teal-800 font-medium">Overall Complete</div>
+              </div>
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                <div className="text-3xl font-bold text-blue-700">31</div>
+                <div className="text-sm text-blue-800 font-medium">Total Features</div>
+              </div>
+              <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-4 border border-pink-200">
+                <div className="text-3xl font-bold text-pink-700">7</div>
+                <div className="text-sm text-pink-800 font-medium">Quick Wins</div>
+              </div>
+            </div>
+
+            {/* Roadmap Sections */}
+            <div className="space-y-6">
+              {/* Critical - Must Have */}
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-red-50 to-red-100 px-4 py-3 border-b border-red-200">
+                  <h3 className="font-bold text-red-900 flex items-center gap-2">
+                    🚨 CRITICAL - Must Have Before Test Users
+                    <span className="text-xs bg-red-200 text-red-800 px-2 py-1 rounded-full">P0</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Authentication & Multi-User Support</div>
+                      <div className="text-xs text-gray-600">User registration, login, session management, user isolation</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2-3 weeks</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Database & Hosting</div>
+                      <div className="text-xs text-gray-600">Migrate to PostgreSQL, deploy backend/frontend, environment management</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 1 week</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">API Key Management</div>
+                      <div className="text-xs text-gray-600">Secure storage, rate limiting, cost tracking, BYOK decision</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 3-5 days</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Gmail OAuth Per User</div>
+                      <div className="text-xs text-gray-600">OAuth flow, token storage, refresh handling per user</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2-3 days</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Domain & SSL</div>
+                      <div className="text-xs text-gray-600">Purchase domain, SSL certificate, configure DNS, update OAuth redirects</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 4 hours</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Wins - In Progress */}
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-3 border-b border-blue-200">
+                  <h3 className="font-bold text-blue-900 flex items-center gap-2">
+                    🎯 Quick Wins - Easy but Impactful
+                    <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">In Progress</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" defaultChecked />
+                    <div className="opacity-60">
+                      <div className="font-medium text-gray-900 line-through">Create Roadmap Page</div>
+                      <div className="text-xs text-teal-600">✓ Completed</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Custom Email Sources (User-Defined) ⚡</div>
+                      <div className="text-xs text-gray-600">UI to add custom job board email patterns with AI assistance</div>
+                      <div className="text-xs text-blue-600 mt-1">🔄 Starting Now - Effort: 2-3 days</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Dark Mode</div>
+                      <div className="text-xs text-gray-600">Toggle in settings, respect system preference</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 1 day</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Keyboard Shortcuts</div>
+                      <div className="text-xs text-gray-600">J/K navigation, / search, Enter open, D delete, ? help</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 4 hours</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Job Notes</div>
+                      <div className="text-xs text-gray-600">Quick notes field, interview date, key takeaways</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2 hours</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Better Empty States & Loading</div>
+                      <div className="text-xs text-gray-600">Skeleton loaders, progress bars, toast notifications</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 1 day</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Enhanced Deduplication</div>
+                      <div className="text-xs text-gray-600">Fuzzy matching, show similar jobs, manual merge</div>
+                      <div className="text-xs text-gray-500 mt-1">Effort: 2 days</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* UX/Onboarding */}
+              <div className="bg-white rounded-lg shadow-sm border border-purple-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-50 to-purple-100 px-4 py-3 border-b border-purple-200">
+                  <h3 className="font-bold text-purple-900 flex items-center gap-2">
+                    🎨 UX/Onboarding - High Priority
+                    <span className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full">P1</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Welcome/Onboarding Flow</div>
+                      <div className="text-xs text-gray-600">Landing page, sign up flow, welcome wizard, interactive tutorial</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">How-To Guide / Documentation</div>
+                      <div className="text-xs text-gray-600">/help page with getting started, FAQs, troubleshooting</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Legal & Trust */}
+              <div className="bg-white rounded-lg shadow-sm border border-amber-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-amber-50 to-amber-100 px-4 py-3 border-b border-amber-200">
+                  <h3 className="font-bold text-amber-900 flex items-center gap-2">
+                    📄 Legal & Trust - Required for Test Users
+                    <span className="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded-full">P0</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Privacy Policy</div>
+                      <div className="text-xs text-gray-600">Data collection, usage, third-party services, retention</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Terms of Service</div>
+                      <div className="text-xs text-gray-600">Acceptable use, service availability, liability limitations</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1" />
+                    <div>
+                      <div className="font-medium text-gray-900">Data Export/Delete (GDPR)</div>
+                      <div className="text-xs text-gray-600">Export button, delete account flow, automated deletion</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feature Improvements */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-4 py-3 border-b border-gray-200">
+                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                    ✨ Feature Improvements - Nice to Have
+                    <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full">P3</span>
+                  </h3>
+                </div>
+                <div className="p-4 space-y-1 text-sm text-gray-700">
+                  <div>• Advanced Search & Filters (salary, date, company size, keywords)</div>
+                  <div>• Job Application Timeline (visual timeline, Kanban board, funnel analytics)</div>
+                  <div>• Interview Management (scheduler, prep notes, calendar integration)</div>
+                  <div>• Company Intelligence (auto-fetch info, ratings, news, employee connections)</div>
+                  <div>• Networking Tracker (contact management, interaction history, reminders)</div>
+                  <div>• Analytics Dashboard (success rate, response times, application velocity)</div>
+                  <div>• Status Automation (auto-move based on email patterns)</div>
+                  <div>• Email Templates (thank you, follow-up, withdrawal, acceptance)</div>
+                  <div>• Mobile Responsiveness (responsive design, touch-friendly UI)</div>
+                </div>
+              </div>
+
+              {/* View Full Roadmap */}
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200 text-center">
+                <h3 className="font-bold text-blue-900 mb-2">📋 Full Roadmap Document</h3>
+                <p className="text-sm text-blue-800 mb-4">
+                  See the complete roadmap with detailed descriptions, technical approaches, and timelines in the ROADMAP.md file.
+                </p>
+                <a
+                  href="https://github.com/creavill/Henry-the-Hire-Tracker/blob/main/ROADMAP.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <ExternalLink size={16} />
+                  View ROADMAP.md on GitHub
+                </a>
+              </div>
+
+              {/* Current Sprint */}
+              <div className="bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg p-6 border border-pink-200">
+                <h3 className="font-bold text-pink-900 mb-3">🚀 Current Sprint (This Week)</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <CheckCircle size={16} className="text-teal-600" />
+                    <span className="font-medium">Create Roadmap Page - DONE</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-blue-600" />
+                    <span className="font-medium">Implement Custom Email Sources UI</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-gray-400" />
+                    <span>Add Dark Mode Toggle</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-gray-400" />
+                    <span>Add Keyboard Shortcuts</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-pink-800">
+                    <Clock size={16} className="text-gray-400" />
+                    <span>Add Job Notes Field</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Settings View */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">⚙️ Settings</h2>
+              <p className="text-gray-600 dark:text-gray-400">Configure custom email sources and application preferences</p>
+            </div>
+
+            {/* Dark Mode Section */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6 transition-colors duration-200">
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 px-4 py-3 border-b border-purple-200 dark:border-gray-600">
+                <h3 className="font-bold text-purple-900 dark:text-purple-200">🌙 Appearance</h3>
+                <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
+                  Customize how Hammy looks
+                </p>
+              </div>
+
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">Dark Mode</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {darkMode ? 'Currently using dark theme' : 'Currently using light theme'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDarkMode(!darkMode)}
+                    className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                      darkMode ? 'bg-purple-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-200 ${
+                        darkMode ? 'translate-x-7' : 'translate-x-1'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center h-full">
+                        {darkMode ? '🌙' : '☀️'}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Email Sources Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-3 border-b border-blue-200">
+                <h3 className="font-bold text-blue-900">📧 Custom Email Sources</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  Add job boards and companies that send you job alerts via email
+                </p>
+              </div>
+
+              <div className="p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <p className="text-sm text-gray-600">
+                    {customEmailSources.length} custom source{customEmailSources.length !== 1 ? 's' : ''} configured
+                  </p>
+                  <button
+                    onClick={() => setShowAddEmailSource(!showAddEmailSource)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Plus size={18} />
+                    {showAddEmailSource ? 'Cancel' : 'Add Email Source'}
+                  </button>
+                </div>
+
+                {/* Add Email Source Form */}
+                {showAddEmailSource && (
+                  <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 mb-4">
+                    <h4 className="font-semibold text-blue-900 mb-3">Add New Email Source</h4>
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.target);
+                      handleAddEmailSource({
+                        name: formData.get('name'),
+                        sender_email: formData.get('sender_email'),
+                        sender_pattern: formData.get('sender_pattern'),
+                        subject_keywords: formData.get('subject_keywords'),
+                      });
+                      e.target.reset();
+                    }}>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Source Name <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="name"
+                            required
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., Stripe Careers, Remote.com Jobs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Sender Email
+                          </label>
+                          <input
+                            type="email"
+                            name="sender_email"
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., careers@stripe.com, jobs@remote.com"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            The exact email address that sends job alerts
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Sender Pattern (Alternative)
+                          </label>
+                          <input
+                            type="text"
+                            name="sender_pattern"
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., noreply@company.com"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Use if emails come from varying senders (one or the other required)
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Subject Keywords (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            name="subject_keywords"
+                            className="w-full px-3 py-2 border rounded-lg"
+                            placeholder="e.g., job alert, new opportunities, careers"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Comma-separated keywords to match in subject line
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Add Source
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddEmailSource(false)}
+                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* Email Sources List */}
+                {customEmailSources.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Mail size={48} className="mx-auto mb-3 text-gray-300" />
+                    <p className="mb-2">No custom email sources yet</p>
+                    <p className="text-sm text-gray-400">
+                      Add email sources to scan job alerts from any company or job board
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {customEmailSources.map(source => (
+                      <div key={source.id} className="border rounded-lg p-3 flex items-start justify-between hover:bg-gray-50">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-gray-900">{source.name}</h4>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              source.enabled
+                                ? 'bg-teal-100 text-teal-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {source.enabled ? 'Active' : 'Disabled'}
+                            </span>
+                          </div>
+                          {source.sender_email && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              <Mail size={14} className="inline mr-1" />
+                              From: {source.sender_email}
+                            </p>
+                          )}
+                          {source.sender_pattern && !source.sender_email && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              <Mail size={14} className="inline mr-1" />
+                              Pattern: {source.sender_pattern}
+                            </p>
+                          )}
+                          {source.subject_keywords && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              <Filter size={14} className="inline mr-1" />
+                              Keywords: {source.subject_keywords}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-1">
+                            Added: {new Date(source.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => handleToggleEmailSource(source)}
+                            className={`px-3 py-1 text-sm rounded ${
+                              source.enabled
+                                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                            }`}
+                            title={source.enabled ? 'Disable' : 'Enable'}
+                          >
+                            {source.enabled ? 'Disable' : 'Enable'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete "${source.name}"?`)) {
+                                handleDeleteEmailSource(source.id);
+                              }
+                            }}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded"
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Help Text */}
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold text-blue-900 mb-2">💡 How to Use Custom Email Sources</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>1. Find a job alert email in your inbox from the source you want to add</li>
+                    <li>2. Copy the sender's email address (e.g., jobs@company.com)</li>
+                    <li>3. Add it here with a memorable name</li>
+                    <li>4. Run "Scan Emails" to start finding jobs from this source</li>
+                  </ul>
+                  <p className="text-sm text-blue-700 mt-3">
+                    <strong>Tip:</strong> Subject keywords are optional but help filter out non-job emails from the same sender.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Future Settings Sections */}
+            <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6 border border-gray-200 text-center">
+              <p className="text-gray-600">
+                More settings coming soon: notifications, preferences, API keys, and more!
+              </p>
+            </div>
+          </>
         )}
       </main>
 
@@ -1533,6 +2309,77 @@ export default function App() {
           onClose={() => setShowResumeModal(false)}
           onSave={fetchResumes}
         />
+      )}
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`px-4 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 animate-slide-in ${
+              toast.type === 'success' ? 'bg-teal-600' :
+              toast.type === 'error' ? 'bg-red-600' :
+              toast.type === 'warning' ? 'bg-yellow-600' :
+              'bg-blue-600'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {toast.type === 'success' && <CheckCircle size={20} />}
+              {toast.type === 'error' && <AlertCircle size={20} />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Keyboard Shortcuts Help Modal */}
+      {showShortcutsHelp && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">⌨️ Keyboard Shortcuts</h3>
+                <button
+                  onClick={() => setShowShortcutsHelp(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                  <span className="text-gray-700 dark:text-gray-300">Navigate down</span>
+                  <kbd className="px-2 py-1 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded font-mono text-sm">j</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                  <span className="text-gray-700 dark:text-gray-300">Navigate up</span>
+                  <kbd className="px-2 py-1 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded font-mono text-sm">k</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                  <span className="text-gray-700 dark:text-gray-300">Focus search</span>
+                  <kbd className="px-2 py-1 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded font-mono text-sm">/</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                  <span className="text-gray-700 dark:text-gray-300">Open selected job</span>
+                  <kbd className="px-2 py-1 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded font-mono text-sm">Enter</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                  <span className="text-gray-700 dark:text-gray-300">Delete selected job</span>
+                  <kbd className="px-2 py-1 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded font-mono text-sm">d</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                  <span className="text-gray-700 dark:text-gray-300">Show this help</span>
+                  <kbd className="px-2 py-1 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded font-mono text-sm">?</kbd>
+                </div>
+              </div>
+
+              <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                Shortcuts work on the Discovered Jobs view
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

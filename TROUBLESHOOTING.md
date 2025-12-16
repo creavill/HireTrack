@@ -1,8 +1,100 @@
 # Troubleshooting Installation Issues
 
+## ⚠️ MOST COMMON ISSUE: Virtual Environment Not Set Up
+
+**If you get `ModuleNotFoundError` for Flask, dotenv, or any package:**
+
+This means packages are installing to a different Python than you're running. **Solution: Use a virtual environment!**
+
+### Quick Fix (Recommended for Everyone):
+
+**Windows:**
+```bash
+# 1. Create virtual environment
+python -m venv venv
+
+# 2. Activate it (IMPORTANT!)
+venv\Scripts\activate
+
+# You should see (venv) in your prompt now
+
+# 3. Install requirements
+pip install -r requirements-local.txt
+
+# 4. Run the app
+python local_app.py
+```
+
+**Mac/Linux:**
+```bash
+# 1. Create virtual environment
+python3 -m venv venv
+
+# 2. Activate it (IMPORTANT!)
+source venv/bin/activate
+
+# You should see (venv) in your prompt now
+
+# 3. Install requirements
+pip install -r requirements-local.txt
+
+# 4. Run the app
+python local_app.py
+```
+
+**To deactivate later:**
+```bash
+deactivate
+```
+
+---
+
 ## Common Issues
 
-### 1. `ModuleNotFoundError: No module named 'dotenv'`
+### 1. `ModuleNotFoundError: No module named 'flask'` (or any package)
+
+**Problem:** Packages not installed in the Python environment you're running
+
+**Solutions:**
+
+**Option A: Use Virtual Environment (RECOMMENDED)**
+```bash
+# Windows
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements-local.txt
+python local_app.py
+
+# Mac/Linux
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-local.txt
+python local_app.py
+```
+
+**Option B: Check which Python/pip you're using**
+```bash
+# Check Python version and location
+python --version
+where python        # Windows
+which python        # Mac/Linux
+
+# Check pip location
+where pip           # Windows
+which pip           # Mac/Linux
+
+# Use python -m pip to ensure same environment
+python -m pip install -r requirements-local.txt
+python local_app.py
+```
+
+**Option C: Install to user directory**
+```bash
+pip install -r requirements-local.txt --user
+python local_app.py
+```
+
+### 2. `ModuleNotFoundError: No module named 'dotenv'`
 
 **Problem:** You installed the wrong package. There are two packages:
 - ❌ `dotenv` (0.9.9) - Wrong package
@@ -79,13 +171,62 @@ pip install -r requirements-local.txt
 
 ## Quick Start Checklist
 
-1. ✅ Python 3.11+ installed (`python --version`)
-2. ✅ Virtual environment created and activated
-3. ✅ Install requirements: `pip install -r requirements-local.txt`
-4. ✅ Copy config: `cp config.example.yaml config.yaml`
-5. ✅ Edit config.yaml with your information
-6. ✅ Set API key: `echo "ANTHROPIC_API_KEY=your_key" > .env`
-7. ✅ Run: `python local_app.py`
+### Windows:
+```bash
+# 1. Check Python version (needs 3.11+)
+python --version
+
+# 2. Create and activate virtual environment
+python -m venv venv
+venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements-local.txt
+
+# 4. Set up configuration
+copy config.example.yaml config.yaml
+# Edit config.yaml with your information (use Notepad or VS Code)
+
+# 5. Create .env file
+echo ANTHROPIC_API_KEY=your_key_here > .env
+# Or create manually with Notepad
+
+# 6. Run the app
+python local_app.py
+```
+
+### Mac/Linux:
+```bash
+# 1. Check Python version (needs 3.11+)
+python3 --version
+
+# 2. Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements-local.txt
+
+# 4. Set up configuration
+cp config.example.yaml config.yaml
+# Edit config.yaml with your information
+
+# 5. Create .env file
+echo "ANTHROPIC_API_KEY=your_key_here" > .env
+
+# 6. Run the app
+python local_app.py
+```
+
+**After first setup, just:**
+```bash
+# Activate venv
+venv\Scripts\activate    # Windows
+source venv/bin/activate # Mac/Linux
+
+# Run
+python local_app.py
+```
 
 ## Still Having Issues?
 

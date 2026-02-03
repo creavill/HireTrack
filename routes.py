@@ -616,21 +616,33 @@ def register_routes(app):
             show_hidden = request.args.get('show_hidden', 'false') == 'true'
 
             conn = get_db()
-            query = "SELECT * FROM jobs WHERE is_filtered = 0"
+
+            # Build query with followup count via LEFT JOIN subquery
+            base_query = """
+                SELECT j.*,
+                       COALESCE(f.followup_count, 0) as followup_count
+                FROM jobs j
+                LEFT JOIN (
+                    SELECT job_id, COUNT(*) as followup_count
+                    FROM followups
+                    GROUP BY job_id
+                ) f ON j.job_id = f.job_id
+                WHERE j.is_filtered = 0
+            """
             params = []
 
             if not show_hidden:
-                query += " AND status != 'hidden'"
+                base_query += " AND j.status != 'hidden'"
 
             if status:
-                query += " AND status = ?"
+                base_query += " AND j.status = ?"
                 params.append(status)
             if min_score:
-                query += " AND baseline_score >= ?"
+                base_query += " AND j.baseline_score >= ?"
                 params.append(min_score)
 
             # Fetch all matching jobs
-            jobs = [dict(row) for row in conn.execute(query, params).fetchall()]
+            jobs = [dict(row) for row in conn.execute(base_query, params).fetchall()]
 
             # Calculate weighted scores and sort
             for job in jobs:
@@ -659,6 +671,45 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"❌ Error in /api/jobs: {e}")
             return jsonify({'error': 'Internal server error'}), 500
+
+    @app.route('/api/jobs/<job_id>', methods=['GET'])
+    def get_job(job_id):
+        """
+        Get a single job by ID with all details.
+
+        Route: GET /api/jobs/{job_id}
+
+        Returns:
+            JSON: {job: {job_id, title, company, location, score, status, ...}}
+        """
+        conn = get_db()
+        try:
+            job = conn.execute(
+                """
+                SELECT
+                    j.*,
+                    j.score as score,
+                    j.baseline_score as baseline_score
+                FROM jobs j
+                WHERE j.job_id = ?
+                """,
+                (job_id,)
+            ).fetchone()
+
+            if job:
+                job_dict = dict(job)
+                # Parse analysis JSON if present
+                if job_dict.get('analysis'):
+                    try:
+                        import json
+                        job_dict['analysis'] = json.loads(job_dict['analysis'])
+                    except:
+                        pass
+                return jsonify({'job': job_dict})
+            else:
+                return jsonify({'error': 'Job not found'}), 404
+        finally:
+            conn.close()
 
     @app.route('/api/jobs/<job_id>', methods=['PATCH'])
     def update_job(job_id):
@@ -1231,6 +1282,60 @@ def register_routes(app):
         conn.commit()
         conn.close()
         return jsonify({'cover_letter': cover_letter})
+
+    @app.route('/api/jobs/<job_id>/activity', methods=['GET'])
+    def get_job_activity(job_id):
+        """
+        Get email activity timeline for a specific job.
+
+        Route: GET /api/jobs/{job_id}/activity
+
+        Returns:
+            JSON: {activities: [{type, subject, date, classification, snippet}, ...]}
+
+        The classification field contains: "interview", "offer", "rejection", "update"
+        Activities are sorted by date descending (most recent first).
+        """
+        conn = get_db()
+        try:
+            # Get followups linked to this job
+            followups = conn.execute(
+                """
+                SELECT
+                    type,
+                    subject,
+                    email_date as date,
+                    snippet,
+                    type as classification,
+                    company
+                FROM followups
+                WHERE job_id = ?
+                ORDER BY email_date DESC
+                """,
+                (job_id,)
+            ).fetchall()
+
+            activities = []
+            for row in followups:
+                activity = dict(row)
+                # Normalize classification
+                classification = (activity.get('type') or '').lower()
+                if 'interview' in classification:
+                    activity['classification'] = 'interview'
+                elif 'offer' in classification:
+                    activity['classification'] = 'offer'
+                elif 'reject' in classification or 'declined' in classification:
+                    activity['classification'] = 'rejection'
+                else:
+                    activity['classification'] = 'update'
+                activities.append(activity)
+
+            return jsonify({'activities': activities})
+        except Exception as e:
+            logger.error(f"Error fetching job activity: {e}")
+            return jsonify({'activities': [], 'error': str(e)})
+        finally:
+            conn.close()
 
     @app.route('/api/capture', methods=['POST'])
     def api_capture():

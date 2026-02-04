@@ -21,7 +21,13 @@ from app.parsers import (
     detect_source,
     parse_email,
 )
-from app.database import DB_PATH, get_db
+from app.database import (
+    DB_PATH,
+    get_db,
+    create_job_from_confirmation,
+    is_email_processed,
+    mark_email_processed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -333,19 +339,80 @@ def classify_followup_email(subject: str, snippet: str) -> str:
 
 
 def extract_company_from_email(from_email: str, subject: str) -> str:
-    """Extract company name from email sender or subject."""
-    if "@" in from_email:
-        domain = from_email.split("@")[1].lower()
-        company = domain.replace(".com", "").replace(".io", "").replace(".co", "")
-        company = company.replace("greenhouse", "").replace("lever", "").replace("workday", "")
+    """
+    Extract company name from email sender or subject.
 
-        if company not in ["gmail", "outlook", "yahoo", "hotmail", "mail", "email"]:
+    Handles compound domain names (e.g., 'risetechnical' → 'Rise Technical')
+    and common ATS domains.
+    """
+    # Known suffixes to split compound names
+    KNOWN_SUFFIXES = [
+        "technical",
+        "solutions",
+        "systems",
+        "software",
+        "technologies",
+        "consulting",
+        "digital",
+        "labs",
+        "group",
+        "inc",
+        "corp",
+        "llc",
+        "services",
+        "partners",
+        "global",
+        "media",
+        "studio",
+        "works",
+        "tech",
+    ]
+
+    # Generic email domains to skip
+    GENERIC_DOMAINS = [
+        "gmail",
+        "outlook",
+        "yahoo",
+        "hotmail",
+        "mail",
+        "email",
+        "icloud",
+        "protonmail",
+        "aol",
+    ]
+
+    # ATS domains to skip (look for company in subject instead)
+    ATS_DOMAINS = ["greenhouse", "lever", "workday", "ashbyhq", "smartrecruiters", "icims"]
+
+    if "@" in from_email:
+        # Extract domain part
+        domain = from_email.split("@")[1].lower()
+        domain = domain.split(".")[0]  # Remove TLD
+
+        # Skip generic email providers
+        if domain in GENERIC_DOMAINS:
+            pass  # Fall through to subject extraction
+        # Skip ATS domains
+        elif domain in ATS_DOMAINS:
+            pass  # Fall through to subject extraction
+        else:
+            # Try to split compound names
+            company = domain.replace("-", " ").replace("_", " ")
+
+            for suffix in KNOWN_SUFFIXES:
+                if company.lower().endswith(suffix) and len(company) > len(suffix):
+                    prefix = company[: len(company) - len(suffix)]
+                    company = f"{prefix} {suffix}"
+                    break
+
             return company.title()
 
+    # Try to extract from subject line
     patterns = [
         r"at\s+([A-Z][A-Za-z0-9\s&.,-]+)",
         r"with\s+([A-Z][A-Za-z0-9\s&.,-]+)",
         r"from\s+([A-Z][A-Za-z0-9\s&.,-]+)",
+        r"for[:\s]+([A-Z][A-Za-z0-9\s&.,-]+)",
     ]
 
     for pattern in patterns:
@@ -353,11 +420,43 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
         if match:
             company = match.group(1).strip()
             company = re.sub(
-                r"\s+(team|recruiting|talent|careers)$", "", company, flags=re.IGNORECASE
+                r"\s+(team|recruiting|talent|careers|hiring)$", "", company, flags=re.IGNORECASE
             )
             return company[:50]
 
     return "Unknown"
+
+
+def extract_role_from_subject(subject: str) -> Optional[str]:
+    """
+    Extract job role/title from email subject line.
+
+    Args:
+        subject: Email subject line
+
+    Returns:
+        Extracted role/title or None if not found
+    """
+    # Common patterns for role extraction
+    patterns = [
+        r"application for[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",  # "application for: DevOps Engineer"
+        r"your application[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
+        r"applied for[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
+        r"for[:\s]+([A-Z][A-Za-z0-9\s/()-]+?)\s+(?:role|position|job)",
+        r"(?:role|position)[:\s]+(.+?)(?:\s+at\s+|\s*$)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, subject, re.IGNORECASE)
+        if match:
+            role = match.group(1).strip()
+            # Clean up common noise
+            role = re.sub(r"^\s*[-:]\s*", "", role)
+            role = re.sub(r"\s*[-:]\s*$", "", role)
+            if len(role) > 5 and len(role) < 100:  # Sanity check
+                return role
+
+    return None
 
 
 def fuzzy_match_company(email_company: str, conn) -> Optional[str]:
@@ -400,11 +499,17 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
     """
     Scan Gmail for follow-up emails (interviews, rejections, offers).
 
+    This function handles the unified scan pipeline for follow-up detection:
+    - Scans for confirmation, interview, rejection, offer, and assessment emails
+    - Uses processed_emails table for deduplication
+    - Creates jobs from confirmations when no matching job exists (cold applications)
+    - Extracts company and role information from email content
+
     Args:
         days_back: How many days back to scan (default: 30)
 
     Returns:
-        List of follow-up email dictionaries
+        List of follow-up email dictionaries with job_id attached
     """
     service = get_gmail_service()
     after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
@@ -414,11 +519,12 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
         f'(subject:unfortunately OR subject:"not selected" OR subject:"other candidates" OR subject:"decided to pursue") after:{after_date}',
         f'(subject:offer OR subject:congratulations OR subject:"pleased to extend") after:{after_date}',
         f'(subject:assessment OR subject:"coding challenge" OR subject:"take-home") after:{after_date}',
-        f'(subject:"received your application" OR subject:"thank you for applying") after:{after_date}',
+        f'(subject:"received your application" OR subject:"thank you for applying" OR subject:"application for") after:{after_date}',
     ]
 
     followups = []
     seen_message_ids = set()
+    jobs_created = 0
 
     for folder in ["INBOX", "[Gmail]/Spam"]:
         for query in queries:
@@ -439,9 +545,15 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
                 for msg_info in messages:
                     msg_id = msg_info["id"]
 
+                    # Skip if already seen in this scan
                     if msg_id in seen_message_ids:
                         continue
                     seen_message_ids.add(msg_id)
+
+                    # Skip if already processed in previous scans
+                    if is_email_processed(msg_id):
+                        logger.debug(f"Skipping already processed email: {msg_id}")
+                        continue
 
                     try:
                         message = (
@@ -468,10 +580,35 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
 
                         email_type = classify_followup_email(subject, snippet)
                         company = extract_company_from_email(from_email, subject)
+                        role = extract_role_from_subject(subject)
 
                         conn = get_db()
                         job_id = fuzzy_match_company(company, conn)
                         conn.close()
+
+                        # Handle cold application confirmations:
+                        # If this is a confirmation email but no matching job exists,
+                        # create a new job from the confirmation data
+                        if job_id is None and email_type == "received" and company != "Unknown":
+                            # Create job from confirmation
+                            title = role or f"Position at {company}"
+                            job_id = create_job_from_confirmation(
+                                title=title,
+                                company=company,
+                                source="email_confirmation",
+                                email_date=email_date,
+                                status="applied",
+                                applied_date=email_date,
+                                raw_text=snippet[:500],
+                                sender_email=from_email,
+                            )
+                            jobs_created += 1
+                            logger.info(
+                                f"✓ Created job from cold application: {title} at {company}"
+                            )
+
+                        # Mark email as processed
+                        mark_email_processed(msg_id, email_type, "followup_scan")
 
                         followups.append(
                             {
@@ -481,12 +618,16 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
                                 "snippet": snippet[:500],
                                 "email_date": email_date,
                                 "job_id": job_id,
+                                "gmail_message_id": msg_id,
+                                "sender_email": from_email,
+                                "role": role,
                                 "in_spam": folder == "[Gmail]/Spam",
                             }
                         )
 
                         logger.info(
-                            f"{email_type.upper()}: {company} - {subject[:50]}... (spam: {folder == '[Gmail]/Spam'})"
+                            f"{email_type.upper()}: {company} - {subject[:50]}... "
+                            f"(job_id: {job_id or 'none'}, spam: {folder == '[Gmail]/Spam'})"
                         )
 
                     except Exception as e:
@@ -497,5 +638,8 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
                 logger.error(f"Query failed - {search_query}: {e}")
                 continue
 
-    logger.info(f"Follow-up scan complete: {len(followups)} emails found")
+    logger.info(
+        f"Follow-up scan complete: {len(followups)} emails found, "
+        f"{jobs_created} jobs created from cold applications"
+    )
     return followups

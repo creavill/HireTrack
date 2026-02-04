@@ -188,6 +188,16 @@ def init_db():
         )
     """)
 
+    # Processed emails table for deduplication
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS processed_emails (
+            gmail_message_id TEXT PRIMARY KEY,
+            email_type TEXT,
+            processed_at TEXT,
+            source TEXT
+        )
+    """)
+
     # Run migrations
     run_migrations(conn)
 
@@ -262,6 +272,25 @@ def run_migrations(conn):
         # Company branding
         conn.execute("ALTER TABLE jobs ADD COLUMN logo_url TEXT")
 
+    # Migration: Add applied_date column to jobs for cold applications
+    if "applied_date" not in jobs_columns:
+        logger.info("Migrating database: adding 'applied_date' column to jobs...")
+        conn.execute("ALTER TABLE jobs ADD COLUMN applied_date TEXT")
+
+    # Migration: Add expanded followup columns for enhanced tracking
+    followups_columns = {row[1] for row in conn.execute("PRAGMA table_info(followups)").fetchall()}
+    if "gmail_message_id" not in followups_columns:
+        logger.info("Migrating database: adding expanded followup columns...")
+        conn.execute("ALTER TABLE followups ADD COLUMN gmail_message_id TEXT")
+        conn.execute("ALTER TABLE followups ADD COLUMN full_body TEXT")
+        conn.execute("ALTER TABLE followups ADD COLUMN sender_email TEXT")
+        conn.execute("ALTER TABLE followups ADD COLUMN confidence REAL DEFAULT 0.8")
+        conn.execute("ALTER TABLE followups ADD COLUMN action_required INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE followups ADD COLUMN action_description TEXT")
+        conn.execute("ALTER TABLE followups ADD COLUMN action_deadline TEXT")
+        conn.execute("ALTER TABLE followups ADD COLUMN is_read INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE followups ADD COLUMN ai_summary TEXT")
+
 
 def get_db():
     """
@@ -288,6 +317,122 @@ def close_db(e=None):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+
+
+def create_job_from_confirmation(
+    title: str,
+    company: str,
+    source: str = "email_confirmation",
+    email_date: str = None,
+    status: str = "applied",
+    applied_date: str = None,
+    raw_text: str = "",
+    sender_email: str = "",
+) -> str:
+    """
+    Create a minimal job record from an application confirmation email.
+
+    These jobs have limited data (no URL, no location, no score) and should
+    be flagged for enrichment to get full descriptions and requirements.
+
+    Args:
+        title: Job title extracted from confirmation email
+        company: Company name extracted from sender or email content
+        source: Source identifier (default: 'email_confirmation')
+        email_date: Date the confirmation email was received
+        status: Job status (default: 'applied')
+        applied_date: Date application was submitted
+        raw_text: Raw email text/snippet
+        sender_email: Email address of the sender
+
+    Returns:
+        job_id: The generated unique job ID
+    """
+    import uuid
+    from datetime import datetime
+
+    job_id = str(uuid.uuid4())[:16]
+    now = datetime.now().isoformat()
+    email_date = email_date or now
+    applied_date = applied_date or email_date
+
+    conn = get_db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO jobs (
+                job_id, title, company, source, status,
+                applied_date, raw_text, email_date,
+                created_at, updated_at, is_filtered
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        """,
+            (
+                job_id,
+                title,
+                company,
+                source,
+                status,
+                applied_date,
+                raw_text,
+                email_date,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        logger.info(f"Created job from confirmation: {title} at {company} (id: {job_id})")
+    finally:
+        conn.close()
+
+    return job_id
+
+
+def is_email_processed(gmail_message_id: str) -> bool:
+    """
+    Check if an email has already been processed.
+
+    Args:
+        gmail_message_id: Gmail message ID
+
+    Returns:
+        True if email was already processed, False otherwise
+    """
+    conn = get_db()
+    try:
+        result = conn.execute(
+            "SELECT 1 FROM processed_emails WHERE gmail_message_id = ?", (gmail_message_id,)
+        ).fetchone()
+        return result is not None
+    finally:
+        conn.close()
+
+
+def mark_email_processed(
+    gmail_message_id: str, email_type: str = "unknown", source: str = ""
+) -> None:
+    """
+    Mark an email as processed to avoid reprocessing.
+
+    Args:
+        gmail_message_id: Gmail message ID
+        email_type: Type of email (job_alert, confirmation, interview, etc.)
+        source: Source that processed the email
+    """
+    from datetime import datetime
+
+    conn = get_db()
+    try:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO processed_emails
+            (gmail_message_id, email_type, processed_at, source)
+            VALUES (?, ?, ?, ?)
+        """,
+            (gmail_message_id, email_type, datetime.now().isoformat(), source),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # Built-in email sources with their parser configurations

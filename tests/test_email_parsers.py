@@ -203,9 +203,9 @@ def test_extract_company_from_email():
     """Test company name extraction from email addresses."""
     from app.email.scanner import extract_company_from_email
 
-    # Test standard format (returns Title case now)
+    # Test compound domain splitting (techcorp → Tech Corp)
     result = extract_company_from_email("careers@techcorp.com", "Job at TechCorp")
-    assert result.lower() == "techcorp", f"Expected 'techcorp', got '{result}'"
+    assert result == "Tech Corp", f"Expected 'Tech Corp', got '{result}'"
 
     # Test extraction from subject when email domain is generic
     result = extract_company_from_email("jobs@gmail.com", "Your application at Google")

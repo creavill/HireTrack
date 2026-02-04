@@ -1135,22 +1135,41 @@ def register_routes(app):
 
         try:
             for followup in followups:
-                # Check if this follow-up already exists
-                existing = conn.execute(
-                    "SELECT id FROM followups WHERE company = ? AND subject = ? AND email_date = ?",
-                    (followup['company'], followup['subject'], followup['email_date'])
-                ).fetchone()
+                # Check if this follow-up already exists (by gmail_message_id or company+subject+date)
+                gmail_msg_id = followup.get('gmail_message_id')
+                if gmail_msg_id:
+                    existing = conn.execute(
+                        "SELECT id FROM followups WHERE gmail_message_id = ?",
+                        (gmail_msg_id,)
+                    ).fetchone()
+                else:
+                    existing = conn.execute(
+                        "SELECT id FROM followups WHERE company = ? AND subject = ? AND email_date = ?",
+                        (followup['company'], followup['subject'], followup['email_date'])
+                    ).fetchone()
 
                 if existing:
                     continue  # Skip duplicates
 
-                # Insert follow-up into database
+                # Insert follow-up into database with expanded fields
                 conn.execute(
-                    '''INSERT INTO followups (company, subject, type, snippet, email_date, job_id, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                    (followup['company'], followup['subject'], followup['type'],
-                     followup['snippet'], followup['email_date'], followup['job_id'],
-                     datetime.now().isoformat())
+                    '''INSERT INTO followups (
+                        company, subject, type, snippet, email_date, job_id, created_at,
+                        gmail_message_id, sender_email, ai_summary
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (
+                        followup['company'],
+                        followup['subject'],
+                        followup['type'],
+                        followup['snippet'],
+                        followup['email_date'],
+                        followup['job_id'],
+                        datetime.now().isoformat(),
+                        followup.get('gmail_message_id'),
+                        followup.get('sender_email'),
+                        f"{followup['type'].title()} from {followup['company']}" +
+                        (f" for {followup.get('role')}" if followup.get('role') else "")
+                    )
                 )
                 conn.commit()
                 new_count += 1
@@ -1244,6 +1263,84 @@ def register_routes(app):
             'followups': [dict(row) for row in followups],
             'stats': stats
         })
+
+    @app.route('/api/followups/actions', methods=['GET'])
+    def get_followup_actions():
+        """
+        Get followups that require action, sorted by deadline.
+
+        Route: GET /api/followups/actions
+
+        Returns:
+            JSON with:
+            - actions: List of followups with action_required=1
+            - count: Total number of pending actions
+        """
+        conn = get_db()
+        actions = conn.execute('''
+            SELECT f.*, j.title, j.company as job_company, j.url
+            FROM followups f
+            LEFT JOIN jobs j ON f.job_id = j.job_id
+            WHERE f.action_required = 1
+            ORDER BY f.action_deadline ASC, f.email_date DESC
+        ''').fetchall()
+        conn.close()
+
+        return jsonify({
+            'actions': [dict(row) for row in actions],
+            'count': len(actions)
+        })
+
+    @app.route('/api/followups/<int:followup_id>/read', methods=['PATCH'])
+    def mark_followup_read(followup_id):
+        """
+        Mark a followup as read.
+
+        Route: PATCH /api/followups/<id>/read
+
+        Returns:
+            JSON with success status
+        """
+        conn = get_db()
+        conn.execute(
+            "UPDATE followups SET is_read = 1 WHERE id = ?",
+            (followup_id,)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+    @app.route('/api/followups/<int:followup_id>/reclassify', methods=['PATCH'])
+    def reclassify_followup(followup_id):
+        """
+        Reclassify a followup email type.
+
+        Route: PATCH /api/followups/<id>/reclassify
+
+        Request Body:
+            type (str): New classification type
+
+        Returns:
+            JSON with success status
+        """
+        data = request.json
+        new_type = data.get('type', '').strip()
+
+        if not new_type:
+            return jsonify({'error': 'Type is required'}), 400
+
+        valid_types = ['interview', 'rejection', 'received', 'offer', 'assessment', 'update']
+        if new_type not in valid_types:
+            return jsonify({'error': f'Invalid type. Must be one of: {valid_types}'}), 400
+
+        conn = get_db()
+        conn.execute(
+            "UPDATE followups SET type = ? WHERE id = ?",
+            (new_type, followup_id)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'type': new_type})
 
     @app.route('/api/jobs/<job_id>/cover-letter', methods=['POST'])
     def api_cover_letter(job_id):
@@ -2080,6 +2177,101 @@ def register_routes(app):
         conn.commit()
         conn.close()
         return jsonify({'success': True})
+
+    # =========================================================================
+    # SETTINGS ENDPOINTS
+    # =========================================================================
+
+    @app.route('/api/settings', methods=['GET'])
+    def get_settings():
+        """
+        Get current application settings and AI provider info.
+
+        Route: GET /api/settings
+
+        Returns:
+            JSON with:
+            - ai_provider: Current AI provider name
+            - ai_model: Current AI model name
+            - available_providers: List of providers with installed packages
+            - email_sources_count: Number of enabled email sources
+            - jobs_count: Total jobs in database
+            - followups_count: Total followups in database
+        """
+        from app.ai.factory import get_provider, get_available_providers, get_provider_info
+
+        # Get current AI provider info
+        try:
+            provider = get_provider()
+            provider_name = provider.provider_name
+            model_name = provider.model_name
+        except Exception as e:
+            provider_name = "unknown"
+            model_name = str(e)
+
+        # Get available providers
+        available = get_available_providers()
+
+        # Get counts from database
+        conn = get_db()
+        email_sources_count = conn.execute(
+            "SELECT COUNT(*) FROM custom_email_sources WHERE enabled = 1"
+        ).fetchone()[0]
+        jobs_count = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        followups_count = conn.execute("SELECT COUNT(*) FROM followups").fetchone()[0]
+        conn.close()
+
+        return jsonify({
+            'ai_provider': provider_name,
+            'ai_model': model_name,
+            'available_providers': available,
+            'email_sources_count': email_sources_count,
+            'jobs_count': jobs_count,
+            'followups_count': followups_count
+        })
+
+    @app.route('/api/settings/test-provider', methods=['POST'])
+    def test_ai_provider():
+        """
+        Test AI provider connection with a simple query.
+
+        Route: POST /api/settings/test-provider
+
+        Returns:
+            JSON with:
+            - success: Boolean indicating if test passed
+            - provider: Provider name
+            - model: Model name
+            - response: Test response from AI
+            - error: Error message if failed
+        """
+        from app.ai.factory import get_provider
+
+        try:
+            provider = get_provider()
+
+            # Simple test: ask AI to respond with JSON
+            test_result = provider.filter_and_score(
+                {
+                    'title': 'Test Job',
+                    'company': 'Test Company',
+                    'location': 'Remote',
+                    'raw_text': 'This is a test job posting.'
+                },
+                'Test resume with Python and JavaScript skills.'
+            )
+
+            return jsonify({
+                'success': True,
+                'provider': provider.provider_name,
+                'model': provider.model_name,
+                'response': test_result
+            })
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
 
     @app.route('/api/email-sources/test-pattern', methods=['POST'])
     def test_email_pattern():

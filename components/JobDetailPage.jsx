@@ -16,7 +16,11 @@ import {
   Mail,
   Calendar,
   Edit2,
-  Save
+  Save,
+  DollarSign,
+  Search,
+  Building2,
+  AlertTriangle
 } from 'lucide-react';
 
 const API_BASE = '/api';
@@ -160,6 +164,8 @@ export default function JobDetailPage() {
   const [notesSaving, setNotesSaving] = useState(false);
   const [coverLetterGenerating, setCoverLetterGenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichment, setEnrichment] = useState(null);
 
   const fetchJob = useCallback(async () => {
     setLoading(true);
@@ -192,10 +198,42 @@ export default function JobDetailPage() {
     setActivitiesLoading(false);
   }, [jobId]);
 
+  const fetchEnrichment = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${jobId}/enrichment`);
+      if (res.ok) {
+        const data = await res.json();
+        setEnrichment(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch enrichment:', err);
+    }
+  }, [jobId]);
+
+  const handleEnrich = async () => {
+    setEnriching(true);
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${jobId}/enrich`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: false })
+      });
+      if (res.ok) {
+        // Refresh job and enrichment data
+        await fetchJob();
+        await fetchEnrichment();
+      }
+    } catch (err) {
+      console.error('Enrichment failed:', err);
+    }
+    setEnriching(false);
+  };
+
   useEffect(() => {
     fetchJob();
     fetchActivities();
-  }, [fetchJob, fetchActivities]);
+    fetchEnrichment();
+  }, [fetchJob, fetchActivities, fetchEnrichment]);
 
   const handleStatusChange = async (newStatus) => {
     try {
@@ -299,9 +337,24 @@ export default function JobDetailPage() {
           <div className="bg-parchment border border-warm-gray p-6">
             <div className="flex items-start gap-4">
               {/* Company Logo */}
+              {job.logo_url ? (
+                <img
+                  src={job.logo_url}
+                  alt={job.company}
+                  className="w-16 h-16 flex-shrink-0 object-contain bg-white border border-warm-gray"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
               <div
                 className="w-16 h-16 flex-shrink-0 flex items-center justify-center"
-                style={{ backgroundColor: getCompanyColor(job.company) }}
+                style={{
+                  backgroundColor: getCompanyColor(job.company),
+                  display: job.logo_url ? 'none' : 'flex'
+                }}
               >
                 <span className="text-parchment font-body font-semibold text-xl">
                   {getCompanyInitials(job.company)}
@@ -309,14 +362,30 @@ export default function JobDetailPage() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <h1 className="font-display text-2xl text-ink mb-1">{job.title}</h1>
+                <div className="flex items-center gap-2 mb-1">
+                  <h1 className="font-display text-2xl text-ink">{job.title}</h1>
+                  {job.is_aggregator && (
+                    <span className="px-2 py-0.5 bg-cream/20 text-cream text-xs font-semibold uppercase tracking-wide flex items-center gap-1">
+                      <AlertTriangle size={12} />
+                      Staffing
+                    </span>
+                  )}
+                </div>
                 <p className="text-lg text-slate font-body">{job.company || 'Unknown Company'}</p>
-                {job.location && (
-                  <p className="flex items-center gap-1 text-sm text-slate mt-1">
-                    <MapPin size={14} />
-                    {job.location}
-                  </p>
-                )}
+                <div className="flex items-center gap-3 mt-1">
+                  {job.location && (
+                    <span className="flex items-center gap-1 text-sm text-slate">
+                      <MapPin size={14} />
+                      {job.location}
+                    </span>
+                  )}
+                  {(enrichment?.salary_estimate || job.salary_estimate) && (
+                    <span className="flex items-center gap-1 text-sm text-patina font-semibold">
+                      <DollarSign size={14} />
+                      {enrichment?.salary_estimate || job.salary_estimate}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Score */}
@@ -338,6 +407,12 @@ export default function JobDetailPage() {
                 <span className="flex items-center gap-1">
                   <Mail size={14} />
                   Posted {formatDate(job.email_date)}
+                </span>
+              )}
+              {enrichment?.is_enriched && (
+                <span className="flex items-center gap-1 text-patina">
+                  <CheckCircle size={14} />
+                  Enriched
                 </span>
               )}
             </div>
@@ -392,6 +467,61 @@ export default function JobDetailPage() {
                 <p className="text-sm text-slate mt-4 pt-4 border-t border-warm-gray">
                   Recommended resume: <span className="text-ink font-medium">{analysis.resume_to_use}</span>
                 </p>
+              )}
+            </div>
+          )}
+
+          {/* Enrichment Data */}
+          {enrichment?.is_enriched && (
+            <div className="bg-parchment border border-warm-gray p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-lg text-ink">Enriched Data</h2>
+                <span className="text-xs text-slate">
+                  Last enriched: {formatDate(enrichment.last_enriched)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {enrichment.salary_estimate && (
+                  <div className="p-3 bg-patina/10 border-l-[3px] border-l-patina">
+                    <span className="text-xs text-patina uppercase tracking-wide font-semibold">Salary Range</span>
+                    <p className="text-lg font-semibold text-ink mt-1">{enrichment.salary_estimate}</p>
+                    {enrichment.salary_confidence && (
+                      <span className={`text-xs ${
+                        enrichment.salary_confidence === 'high' ? 'text-patina' :
+                        enrichment.salary_confidence === 'medium' ? 'text-cream' : 'text-slate'
+                      }`}>
+                        {enrichment.salary_confidence} confidence
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {enrichment.enrichment_source && (
+                  <div className="p-3 bg-warm-gray/30 border-l-[3px] border-l-slate">
+                    <span className="text-xs text-slate uppercase tracking-wide font-semibold">Source</span>
+                    <a
+                      href={enrichment.enrichment_source}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-copper hover:underline flex items-center gap-1 mt-1"
+                    >
+                      <ExternalLink size={12} />
+                      View Original Posting
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {enrichment.full_description && (
+                <div className="mt-4 pt-4 border-t border-warm-gray">
+                  <h3 className="text-sm font-body font-semibold text-ink uppercase tracking-wide mb-2">
+                    Full Description (Preview)
+                  </h3>
+                  <p className="text-sm text-slate font-body line-clamp-4">
+                    {enrichment.full_description}
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -458,6 +588,26 @@ export default function JobDetailPage() {
                   <>
                     <FileText size={16} />
                     Generate Cover Letter
+                  </>
+                )}
+              </button>
+            )}
+
+            {!enrichment?.is_enriched && (
+              <button
+                onClick={handleEnrich}
+                disabled={enriching}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-transparent border border-patina text-patina font-body uppercase tracking-wide text-sm hover:bg-patina/10 disabled:opacity-50 transition-colors"
+              >
+                {enriching ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Enriching...
+                  </>
+                ) : (
+                  <>
+                    <Search size={16} />
+                    Enrich Job Data
                   </>
                 )}
               </button>

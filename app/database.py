@@ -244,6 +244,22 @@ def run_migrations(conn):
         conn.execute("ALTER TABLE custom_email_sources ADD COLUMN parser_class TEXT")
         conn.execute("ALTER TABLE custom_email_sources ADD COLUMN sample_email TEXT")
 
+    # Migration: Add enrichment columns (Phase 4 - Web Search Enrichment)
+    if 'salary_estimate' not in jobs_columns:
+        logger.info("Migrating database: adding enrichment columns to jobs...")
+        # Salary enrichment
+        conn.execute("ALTER TABLE jobs ADD COLUMN salary_estimate TEXT")
+        conn.execute("ALTER TABLE jobs ADD COLUMN salary_confidence TEXT DEFAULT 'none'")
+        # Full description from web search
+        conn.execute("ALTER TABLE jobs ADD COLUMN full_description TEXT")
+        # Enrichment metadata
+        conn.execute("ALTER TABLE jobs ADD COLUMN last_enriched TEXT")
+        conn.execute("ALTER TABLE jobs ADD COLUMN enrichment_source TEXT")
+        # Aggregator/staffing agency flag
+        conn.execute("ALTER TABLE jobs ADD COLUMN is_aggregator INTEGER DEFAULT 0")
+        # Company branding
+        conn.execute("ALTER TABLE jobs ADD COLUMN logo_url TEXT")
+
 
 def get_db():
     """

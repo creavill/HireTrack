@@ -207,6 +207,11 @@ class Config:
         return self._config.get('ai', {}).get('model', 'claude-sonnet-4-20250514')
 
     @property
+    def ai_provider(self) -> str:
+        """Get AI provider to use."""
+        return self._config.get('ai', {}).get('provider', 'claude')
+
+    @property
     def strict_accuracy(self) -> bool:
         """Get whether to enforce strict accuracy in AI analysis."""
         return self._config.get('ai', {}).get('strict_accuracy', True)
@@ -240,6 +245,15 @@ class Config:
     def reload(self) -> None:
         """Reload configuration from file."""
         self._config = self._load_config()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Return a copy of the raw configuration dictionary.
+
+        Returns:
+            Dict containing all configuration values
+        """
+        return dict(self._config)
 
     def get(self, key: str, default: Any = None) -> Any:
         """

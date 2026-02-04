@@ -172,18 +172,60 @@ class OpenAIProvider(AIProvider):
         """
         Search for and enrich job description data.
 
-        Note: OpenAI does not have built-in web search.
-        This would require integration with a search API.
+        Uses web search to find job posting and AI to extract structured info.
         """
-        return {
-            "found": False,
-            "description": "",
-            "requirements": [],
-            "salary_range": None,
-            "source_url": None,
-            "enrichment_status": "not_supported",
-            "error": "Web search enrichment not supported for OpenAI provider."
-        }
+        try:
+            from app.enrichment import search_job_posting
+            from .prompts import build_extract_from_page_prompt
+
+            # Search for the job posting
+            search_result = search_job_posting(company, title)
+
+            if not search_result.found:
+                return search_result.to_dict()
+
+            # If we got a description, use AI to extract structured info
+            if search_result.description:
+                prompt = build_extract_from_page_prompt(
+                    search_result.description, company, title
+                )
+                try:
+                    response = self._generate(prompt, max_tokens=1500)
+                    extracted = self._parse_json_response(response)
+
+                    # Merge search result with AI extraction
+                    return {
+                        "found": True,
+                        "description": extracted.get('description', search_result.description),
+                        "requirements": extracted.get('requirements', search_result.requirements),
+                        "salary_range": extracted.get('salary_range') or search_result.salary_range,
+                        "benefits": extracted.get('benefits', search_result.benefits),
+                        "source_url": search_result.source_url,
+                        "location": extracted.get('location'),
+                        "job_type": extracted.get('job_type'),
+                        "experience_level": extracted.get('experience_level'),
+                        "enrichment_status": "success"
+                    }
+                except Exception as e:
+                    logger.warning(f"AI extraction failed, using raw search: {e}")
+                    return search_result.to_dict()
+
+            return search_result.to_dict()
+
+        except ImportError as e:
+            logger.warning(f"Enrichment module not available: {e}")
+            return {
+                "found": False,
+                "enrichment_status": "not_supported",
+                "error": "Web search enrichment dependencies not installed."
+            }
+        except Exception as e:
+            logger.error(f"Search job description error: {e}")
+            return {
+                "found": False,
+                "enrichment_status": "error",
+                "error": str(e)
+            }
 
     def classify_email(
         self,

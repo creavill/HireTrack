@@ -2839,6 +2839,208 @@ def register_routes(app):
             }
         })
 
+    # ===== ENRICHMENT ENDPOINTS =====
+
+    @app.route('/api/jobs/<job_id>/enrich', methods=['POST'])
+    def api_enrich_job(job_id):
+        """
+        Enrich a single job with additional data from web search.
+
+        Route: POST /api/jobs/<job_id>/enrich
+
+        Request Body (optional):
+            force (bool): Force re-enrichment even if already enriched
+
+        Returns:
+            JSON with enrichment results including salary, description, etc.
+        """
+        try:
+            from app.enrichment import enrich_job
+
+            data = request.get_json() or {}
+            force = data.get('force', False)
+
+            result = enrich_job(job_id, force=force)
+
+            if result.get('success'):
+                return jsonify(result)
+            else:
+                return jsonify(result), 400
+
+        except Exception as e:
+            logger.error(f"Error enriching job {job_id}: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/jobs/enrich-batch', methods=['POST'])
+    def api_enrich_jobs_batch():
+        """
+        Enrich multiple jobs with additional data.
+
+        Route: POST /api/jobs/enrich-batch
+
+        Request Body:
+            job_ids (list): List of job IDs to enrich
+            max_jobs (int): Maximum number of jobs to process (default 10)
+
+        Returns:
+            JSON with batch enrichment results
+        """
+        try:
+            from app.enrichment import enrich_jobs_batch
+
+            data = request.get_json() or {}
+            job_ids = data.get('job_ids', [])
+            max_jobs = min(data.get('max_jobs', 10), 50)  # Cap at 50
+
+            if not job_ids:
+                return jsonify({'error': 'No job_ids provided'}), 400
+
+            result = enrich_jobs_batch(job_ids, max_jobs=max_jobs)
+            return jsonify(result)
+
+        except Exception as e:
+            logger.error(f"Error in batch enrichment: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/jobs/auto-enrich', methods=['POST'])
+    def api_auto_enrich():
+        """
+        Automatically enrich top-scoring unenriched jobs.
+
+        Route: POST /api/jobs/auto-enrich
+
+        Request Body (optional):
+            count (int): Number of jobs to enrich (default 5, max 20)
+            min_score (int): Minimum score threshold (default 50)
+
+        Returns:
+            JSON with batch enrichment results
+        """
+        try:
+            from app.enrichment import auto_enrich_top_jobs
+
+            data = request.get_json() or {}
+            count = min(data.get('count', 5), 20)
+            min_score = data.get('min_score', 50)
+
+            result = auto_enrich_top_jobs(count=count, min_score=min_score)
+            return jsonify(result)
+
+        except Exception as e:
+            logger.error(f"Error in auto enrichment: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/jobs/<job_id>/enrichment', methods=['GET'])
+    def api_get_enrichment(job_id):
+        """
+        Get enrichment status and data for a job.
+
+        Route: GET /api/jobs/<job_id>/enrichment
+
+        Returns:
+            JSON with enrichment data:
+            - salary_estimate
+            - salary_confidence
+            - full_description (truncated)
+            - last_enriched
+            - enrichment_source
+            - is_aggregator
+            - logo_url
+        """
+        try:
+            conn = get_db()
+            job = conn.execute("""
+                SELECT salary_estimate, salary_confidence, full_description,
+                       last_enriched, enrichment_source, is_aggregator, logo_url
+                FROM jobs WHERE job_id = ?
+            """, (job_id,)).fetchone()
+            conn.close()
+
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+
+            return jsonify({
+                'job_id': job_id,
+                'salary_estimate': job['salary_estimate'],
+                'salary_confidence': job['salary_confidence'] or 'none',
+                'full_description': (job['full_description'][:1000] + '...')
+                    if job['full_description'] and len(job['full_description']) > 1000
+                    else job['full_description'],
+                'last_enriched': job['last_enriched'],
+                'enrichment_source': job['enrichment_source'],
+                'is_aggregator': bool(job['is_aggregator']),
+                'logo_url': job['logo_url'],
+                'is_enriched': job['last_enriched'] is not None
+            })
+
+        except Exception as e:
+            logger.error(f"Error getting enrichment for {job_id}: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/jobs/<job_id>/logo', methods=['POST'])
+    def api_fetch_logo(job_id):
+        """
+        Fetch and update logo for a job.
+
+        Route: POST /api/jobs/<job_id>/logo
+
+        Returns:
+            JSON with logo URL and update status
+        """
+        try:
+            from app.enrichment import update_job_logo
+
+            conn = get_db()
+            job = conn.execute(
+                "SELECT company FROM jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            conn.close()
+
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+
+            result = update_job_logo(job_id, job['company'])
+            return jsonify(result)
+
+        except Exception as e:
+            logger.error(f"Error fetching logo for {job_id}: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/jobs/<job_id>/detect-aggregator', methods=['POST'])
+    def api_detect_aggregator(job_id):
+        """
+        Detect if a job is from a staffing agency.
+
+        Route: POST /api/jobs/<job_id>/detect-aggregator
+
+        Returns:
+            JSON with detection results
+        """
+        try:
+            from app.enrichment import detect_and_flag_aggregator
+
+            conn = get_db()
+            job = conn.execute(
+                "SELECT company, title, raw_text FROM jobs WHERE job_id = ?",
+                (job_id,)
+            ).fetchone()
+            conn.close()
+
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+
+            result = detect_and_flag_aggregator(
+                job_id=job_id,
+                company=job['company'],
+                title=job['title'],
+                description=job['raw_text'] or ''
+            )
+            return jsonify(result)
+
+        except Exception as e:
+            logger.error(f"Error detecting aggregator for {job_id}: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/research-jobs', methods=['POST'])
     def research_jobs():
         """
@@ -3286,9 +3488,9 @@ def register_routes(app):
         try:
             providers = get_provider_info()
 
-            # Get current provider and model from config
-            current_provider = CONFIG.get('ai', {}).get('provider', 'claude')
-            current_model = CONFIG.get('ai', {}).get('model', 'claude-sonnet-4-20250514')
+            # Get current provider and model from config using Config class properties
+            current_provider = CONFIG.ai_provider
+            current_model = CONFIG.ai_model
 
             return jsonify({
                 'providers': providers,

@@ -246,6 +246,15 @@ class Config:
         """Reload configuration from file."""
         self._config = self._load_config()
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Return a copy of the raw configuration dictionary.
+
+        Returns:
+            Dict containing all configuration values
+        """
+        return dict(self._config)
+
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get configuration value by dot-notation key.

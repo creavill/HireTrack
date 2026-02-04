@@ -8,10 +8,7 @@ providing strengths, gaps, and recommendations.
 from typing import Any, Dict
 
 
-def build_analyze_job_prompt(
-    job_data: Dict[str, Any],
-    resume_text: str
-) -> str:
+def build_analyze_job_prompt(job_data: Dict[str, Any], resume_text: str) -> str:
     """
     Build the prompt for detailed job analysis.
 

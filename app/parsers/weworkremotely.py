@@ -24,7 +24,7 @@ class WeWorkRemotelyParser(BaseParser):
 
     @property
     def source_name(self) -> str:
-        return 'weworkremotely'
+        return "weworkremotely"
 
     def parse(self, html: str, email_date: str) -> list:
         """
@@ -50,29 +50,29 @@ class WeWorkRemotelyParser(BaseParser):
 
         for feed_url in WWR_FEEDS:
             try:
-                req = urllib.request.Request(feed_url, headers={'User-Agent': 'JobTracker/1.0'})
+                req = urllib.request.Request(feed_url, headers={"User-Agent": "JobTracker/1.0"})
                 with urllib.request.urlopen(req, timeout=10) as response:
                     xml_data = response.read()
 
                 root = ET.fromstring(xml_data)
 
-                for item in root.findall('.//item'):
-                    title_elem = item.find('title')
-                    link_elem = item.find('link')
-                    desc_elem = item.find('description')
-                    pub_date_elem = item.find('pubDate')
+                for item in root.findall(".//item"):
+                    title_elem = item.find("title")
+                    link_elem = item.find("link")
+                    desc_elem = item.find("description")
+                    pub_date_elem = item.find("pubDate")
 
                     if title_elem is None or link_elem is None:
                         continue
 
-                    title = title_elem.text or ''
-                    url = self.clean_job_url(link_elem.text or '')
-                    description = desc_elem.text if desc_elem is not None else ''
+                    title = title_elem.text or ""
+                    url = self.clean_job_url(link_elem.text or "")
+                    description = desc_elem.text if desc_elem is not None else ""
 
-                    company = ''
+                    company = ""
                     job_title = title
-                    if ':' in title:
-                        parts = title.split(':', 1)
+                    if ":" in title:
+                        parts = title.split(":", 1)
                         company = parts[0].strip()
                         job_title = parts[1].strip()
 
@@ -80,6 +80,7 @@ class WeWorkRemotelyParser(BaseParser):
                     if pub_date_elem is not None and pub_date_elem.text:
                         try:
                             from email.utils import parsedate_to_datetime
+
                             dt = parsedate_to_datetime(pub_date_elem.text)
                             if dt < cutoff:
                                 continue
@@ -88,23 +89,25 @@ class WeWorkRemotelyParser(BaseParser):
                             pass
 
                     if description:
-                        soup = BeautifulSoup(description, 'html.parser')
-                        description = soup.get_text(' ', strip=True)[:2000]
+                        soup = BeautifulSoup(description, "html.parser")
+                        description = soup.get_text(" ", strip=True)[:2000]
 
                     job_id = self.generate_job_id(url, job_title, company)
 
-                    jobs.append({
-                        'job_id': job_id,
-                        'title': job_title[:200],
-                        'company': company[:100],
-                        'location': 'Remote',
-                        'url': url,
-                        'source': self.source_name,
-                        'raw_text': description or title,
-                        'description': description,
-                        'created_at': pub_date,
-                        'email_date': pub_date
-                    })
+                    jobs.append(
+                        {
+                            "job_id": job_id,
+                            "title": job_title[:200],
+                            "company": company[:100],
+                            "location": "Remote",
+                            "url": url,
+                            "source": self.source_name,
+                            "raw_text": description or title,
+                            "description": description,
+                            "created_at": pub_date,
+                            "email_date": pub_date,
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"WWR feed error ({feed_url}): {e}")

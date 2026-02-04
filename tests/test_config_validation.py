@@ -21,11 +21,10 @@ def test_config_requires_user_section():
     """Test that config validation requires user section."""
     from config_loader import Config
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        yaml.dump({
-            'resumes': {'files': ['resume.txt']},
-            'preferences': {'locations': {'primary': []}}
-        }, f)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(
+            {"resumes": {"files": ["resume.txt"]}, "preferences": {"locations": {"primary": []}}}, f
+        )
         config_path = Path(f.name)
 
     try:
@@ -40,12 +39,15 @@ def test_config_requires_user_fields():
     from config_loader import Config
 
     # Missing name
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        yaml.dump({
-            'user': {'email': 'test@example.com'},
-            'resumes': {'files': ['resume.txt']},
-            'preferences': {'locations': {'primary': []}}
-        }, f)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(
+            {
+                "user": {"email": "test@example.com"},
+                "resumes": {"files": ["resume.txt"]},
+                "preferences": {"locations": {"primary": []}},
+            },
+            f,
+        )
         config_path = Path(f.name)
 
     try:
@@ -59,12 +61,15 @@ def test_config_requires_resume_files():
     """Test that config validation requires resume files."""
     from config_loader import Config
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        yaml.dump({
-            'user': {'name': 'Test User', 'email': 'test@example.com'},
-            'resumes': {},
-            'preferences': {'locations': {'primary': []}}
-        }, f)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(
+            {
+                "user": {"name": "Test User", "email": "test@example.com"},
+                "resumes": {},
+                "preferences": {"locations": {"primary": []}},
+            },
+            f,
+        )
         config_path = Path(f.name)
 
     try:
@@ -79,42 +84,37 @@ def test_config_loads_valid_config():
     from config_loader import Config
 
     valid_config = {
-        'user': {
-            'name': 'Test User',
-            'email': 'test@example.com',
-            'phone': '555-1234',
-            'location': 'San Diego, CA'
+        "user": {
+            "name": "Test User",
+            "email": "test@example.com",
+            "phone": "555-1234",
+            "location": "San Diego, CA",
         },
-        'resumes': {
-            'files': ['resumes/fullstack_developer_resume.txt'],
-            'default': 'fullstack'
-        },
-        'preferences': {
-            'locations': {
-                'primary': [
-                    {'name': 'Remote', 'type': 'remote', 'score_bonus': 100}
-                ],
-                'secondary': [],
-                'excluded': []
+        "resumes": {"files": ["resumes/fullstack_developer_resume.txt"], "default": "fullstack"},
+        "preferences": {
+            "locations": {
+                "primary": [{"name": "Remote", "type": "remote", "score_bonus": 100}],
+                "secondary": [],
+                "excluded": [],
             },
-            'filters': {
-                'exclude_keywords': ['Director', 'VP'],
-                'min_baseline_score': 30,
-                'auto_interest_threshold': 75
-            }
-        }
+            "filters": {
+                "exclude_keywords": ["Director", "VP"],
+                "min_baseline_score": 30,
+                "auto_interest_threshold": 75,
+            },
+        },
     }
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         yaml.dump(valid_config, f)
         config_path = Path(f.name)
 
     try:
         config = Config(config_path=config_path)
 
-        assert config.user_name == 'Test User'
-        assert config.user_email == 'test@example.com'
-        assert config.user_phone == '555-1234'
+        assert config.user_name == "Test User"
+        assert config.user_email == "test@example.com"
+        assert config.user_phone == "555-1234"
         assert len(config.resume_files) == 1
         assert config.min_baseline_score == 30
         assert len(config.exclude_keywords) == 2
@@ -127,21 +127,12 @@ def test_config_default_values():
     from config_loader import Config
 
     minimal_config = {
-        'user': {
-            'name': 'Test User',
-            'email': 'test@example.com'
-        },
-        'resumes': {
-            'files': ['resume.txt']
-        },
-        'preferences': {
-            'locations': {
-                'primary': []
-            }
-        }
+        "user": {"name": "Test User", "email": "test@example.com"},
+        "resumes": {"files": ["resume.txt"]},
+        "preferences": {"locations": {"primary": []}},
     }
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         yaml.dump(minimal_config, f)
         config_path = Path(f.name)
 
@@ -149,12 +140,12 @@ def test_config_default_values():
         config = Config(config_path=config_path)
 
         # Should have default values
-        assert config.user_phone == ''
-        assert config.user_location == ''
-        assert config.default_resume == 'fullstack'
+        assert config.user_phone == ""
+        assert config.user_location == ""
+        assert config.default_resume == "fullstack"
         assert config.min_baseline_score == 30
         assert config.auto_interest_threshold == 75
-        assert config.ai_model == 'claude-sonnet-4-20250514'
+        assert config.ai_model == "claude-sonnet-4-20250514"
     finally:
         config_path.unlink()
 
@@ -181,9 +172,9 @@ def test_experience_level_configuration(mock_config):
     """Test experience level configuration."""
     exp = mock_config.experience_level
 
-    assert exp['min_years'] == 1
-    assert exp['max_years'] == 5
-    assert exp['current_level'] == 'mid'
+    assert exp["min_years"] == 1
+    assert exp["max_years"] == 5
+    assert exp["current_level"] == "mid"
 
 
 def test_config_file_not_found():

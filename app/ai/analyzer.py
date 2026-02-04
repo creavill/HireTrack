@@ -25,13 +25,14 @@ def ai_filter_and_score(job: Dict, resume_text: str) -> Tuple[bool, int, str]:
         Tuple of (should_keep, baseline_score, reason)
     """
     from app.config import get_config
+
     config = get_config()
 
     # Build preferences dict for the new interface
     preferences = {
-        'location_filter': config.get_location_filter_prompt(),
-        'experience_level': config.experience_level,
-        'exclude_keywords': config.exclude_keywords
+        "location_filter": config.get_location_filter_prompt(),
+        "experience_level": config.experience_level,
+        "exclude_keywords": config.exclude_keywords,
     }
 
     provider = get_provider()
@@ -39,9 +40,9 @@ def ai_filter_and_score(job: Dict, resume_text: str) -> Tuple[bool, int, str]:
 
     # Convert dict result to tuple for backwards compatibility
     return (
-        result.get('keep', False),
-        result.get('baseline_score', 50),
-        result.get('filter_reason', 'unknown')
+        result.get("keep", False),
+        result.get("baseline_score", 50),
+        result.get("filter_reason", "unknown"),
     )
 
 
@@ -77,10 +78,7 @@ def generate_cover_letter(job: Dict, resume_text: str, analysis: Optional[Dict] 
 
 
 def generate_interview_answer(
-    question: str,
-    job: Dict,
-    resume_text: str,
-    analysis: Optional[Dict] = None
+    question: str, job: Dict, resume_text: str, analysis: Optional[Dict] = None
 ) -> str:
     """
     Generate an interview answer.

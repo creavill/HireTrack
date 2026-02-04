@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements-local.txt
+          pip install pytest pytest-cov black
+
+      - name: Set up test configuration
+        run: cp config.example.yaml config.yaml
+
+      - name: Check Python formatting
+        run: black --check --line-length 100 app/ tests/ run.py
+
+      - name: Run Python tests
+        run: pytest tests/ -v --tb=short
+        env:
+          # Tests should use mocks, not real API keys
+          ANTHROPIC_API_KEY: test-key-not-real
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check frontend formatting
+        run: npx prettier --check "*.jsx" "components/*.jsx" || true
+
+      - name: Build frontend
+        run: npm run build

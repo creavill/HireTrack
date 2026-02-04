@@ -35,17 +35,17 @@ from .scanner import (
 
 __all__ = [
     # Client
-    'GmailClient',
-    'get_gmail_client',
-    'get_gmail_service',
-    'get_email_body',
-    'SCOPES',
-    'CREDENTIALS_FILE',
-    'TOKEN_FILE',
+    "GmailClient",
+    "get_gmail_client",
+    "get_gmail_service",
+    "get_email_body",
+    "SCOPES",
+    "CREDENTIALS_FILE",
+    "TOKEN_FILE",
     # Scanner
-    'scan_emails',
-    'scan_followup_emails',
-    'classify_followup_email',
-    'extract_company_from_email',
-    'fuzzy_match_company',
+    "scan_emails",
+    "scan_followup_emails",
+    "classify_followup_email",
+    "extract_company_from_email",
+    "fuzzy_match_company",
 ]

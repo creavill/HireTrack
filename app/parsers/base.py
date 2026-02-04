@@ -59,9 +59,9 @@ class BaseParser(ABC):
         if not text:
             return ""
         # Replace all newlines and tabs with spaces
-        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+        text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
         # Normalize multiple spaces to single space
-        text = ' '.join(text.split())
+        text = " ".join(text.split())
         # Strip leading/trailing whitespace
         return text.strip()
 
@@ -85,39 +85,50 @@ class BaseParser(ABC):
         parsed = urlparse(url)
 
         # LinkedIn: keep only essential params
-        if 'linkedin.com' in parsed.netloc:
-            if '/jobs/view/' in parsed.path:
-                job_id = parsed.path.split('/jobs/view/')[-1].split('?')[0].split('/')[0]
+        if "linkedin.com" in parsed.netloc:
+            if "/jobs/view/" in parsed.path:
+                job_id = parsed.path.split("/jobs/view/")[-1].split("?")[0].split("/")[0]
                 return f"https://www.linkedin.com/jobs/view/{job_id}"
-            elif 'currentJobId=' in parsed.query:
+            elif "currentJobId=" in parsed.query:
                 params = parse_qs(parsed.query)
-                job_id = params.get('currentJobId', [''])[0]
+                job_id = params.get("currentJobId", [""])[0]
                 if job_id:
                     return f"https://www.linkedin.com/jobs/view/{job_id}"
 
         # Indeed: keep only jk param
-        elif 'indeed.com' in parsed.netloc:
+        elif "indeed.com" in parsed.netloc:
             params = parse_qs(parsed.query)
-            if 'jk' in params:
+            if "jk" in params:
                 return f"https://www.indeed.com/viewjob?jk={params['jk'][0]}"
-            elif 'vjk' in params:
+            elif "vjk" in params:
                 return f"https://www.indeed.com/viewjob?jk={params['vjk'][0]}"
 
         # Remove common tracking params
         if parsed.query:
             params = parse_qs(parsed.query)
             tracking_params = [
-                'trackingId', 'refId', 'lipi', 'midToken', 'midSig', 'trk',
-                'trkEmail', 'eid', 'otpToken', 'utm_source', 'utm_medium',
-                'utm_campaign', 'ref', 'source'
+                "trackingId",
+                "refId",
+                "lipi",
+                "midToken",
+                "midSig",
+                "trk",
+                "trkEmail",
+                "eid",
+                "otpToken",
+                "utm_source",
+                "utm_medium",
+                "utm_campaign",
+                "ref",
+                "source",
             ]
             cleaned_params = {k: v for k, v in params.items() if k not in tracking_params}
 
             if cleaned_params:
                 new_query = urlencode(cleaned_params, doseq=True)
-                return urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', new_query, ''))
+                return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", new_query, ""))
             else:
-                return urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
+                return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
         return url
 

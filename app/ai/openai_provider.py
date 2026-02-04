@@ -34,47 +34,41 @@ class OpenAIProvider(AIProvider):
             config: Configuration dict with optional 'ai.model' setting
         """
         config = config or {}
-        ai_config = config.get('ai', {})
-        self._model = ai_config.get('model') or DEFAULT_MODEL
+        ai_config = config.get("ai", {})
+        self._model = ai_config.get("model") or DEFAULT_MODEL
 
         # Check for API key
-        api_key = os.environ.get('OPENAI_API_KEY')
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise ValueError(
-                "OPENAI_API_KEY not found. "
-                "Set it in .env or environment variables."
+                "OPENAI_API_KEY not found. " "Set it in .env or environment variables."
             )
 
         # Import openai here to avoid requiring it if not used
         try:
             import openai
+
             self._client = openai.OpenAI()
         except ImportError:
             raise ImportError(
-                "openai package not installed. "
-                "Install it with: pip install openai"
+                "openai package not installed. " "Install it with: pip install openai"
             )
 
     @property
     def provider_name(self) -> str:
-        return 'openai'
+        return "openai"
 
     @property
     def model_name(self) -> str:
         return self._model
 
-    def _generate(
-        self,
-        prompt: str,
-        max_tokens: int = 1000,
-        model: Optional[str] = None
-    ) -> str:
+    def _generate(self, prompt: str, max_tokens: int = 1000, model: Optional[str] = None) -> str:
         """Generate a response using OpenAI."""
         try:
             response = self._client.chat.completions.create(
                 model=model or self._model,
                 max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
@@ -82,10 +76,7 @@ class OpenAIProvider(AIProvider):
             raise
 
     def filter_and_score(
-        self,
-        job_data: Dict[str, Any],
-        resume_text: str,
-        preferences: Dict[str, Any]
+        self, job_data: Dict[str, Any], resume_text: str, preferences: Dict[str, Any]
     ) -> Dict[str, Any]:
         """AI-based job filtering and baseline scoring."""
         prompt = build_filter_and_score_prompt(job_data, resume_text, preferences)
@@ -101,14 +92,10 @@ class OpenAIProvider(AIProvider):
                 "baseline_score": 30,
                 "filter_reason": "filter error - kept by default",
                 "location_match": "unknown",
-                "skill_level_match": "unknown"
+                "skill_level_match": "unknown",
             }
 
-    def analyze_job(
-        self,
-        job_data: Dict[str, Any],
-        resume_text: str
-    ) -> Dict[str, Any]:
+    def analyze_job(self, job_data: Dict[str, Any], resume_text: str) -> Dict[str, Any]:
         """Perform detailed job qualification analysis."""
         prompt = build_analyze_job_prompt(job_data, resume_text)
 
@@ -123,22 +110,19 @@ class OpenAIProvider(AIProvider):
                 "strengths": [],
                 "gaps": [],
                 "recommendation": str(e),
-                "resume_to_use": "fullstack"
+                "resume_to_use": "fullstack",
             }
 
     def generate_cover_letter(
-        self,
-        job: Dict[str, Any],
-        resume_text: str,
-        analysis: Optional[Dict[str, Any]] = None
+        self, job: Dict[str, Any], resume_text: str, analysis: Optional[Dict[str, Any]] = None
     ) -> str:
         """Generate a tailored cover letter."""
         import json
 
         # Parse analysis from job if not provided separately
-        if analysis is None and job.get('analysis'):
+        if analysis is None and job.get("analysis"):
             try:
-                analysis = json.loads(job['analysis'])
+                analysis = json.loads(job["analysis"])
             except (json.JSONDecodeError, TypeError):
                 analysis = {}
 
@@ -154,7 +138,7 @@ class OpenAIProvider(AIProvider):
         question: str,
         job: Dict[str, Any],
         resume_text: str,
-        analysis: Optional[Dict[str, Any]] = None
+        analysis: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Generate an interview answer."""
         prompt = build_interview_answer_prompt(question, job, resume_text, analysis)
@@ -164,11 +148,7 @@ class OpenAIProvider(AIProvider):
         except Exception as e:
             return f"Error generating answer: {e}"
 
-    def search_job_description(
-        self,
-        company: str,
-        title: str
-    ) -> Dict[str, Any]:
+    def search_job_description(self, company: str, title: str) -> Dict[str, Any]:
         """
         Search for and enrich job description data.
 
@@ -186,9 +166,7 @@ class OpenAIProvider(AIProvider):
 
             # If we got a description, use AI to extract structured info
             if search_result.description:
-                prompt = build_extract_from_page_prompt(
-                    search_result.description, company, title
-                )
+                prompt = build_extract_from_page_prompt(search_result.description, company, title)
                 try:
                     response = self._generate(prompt, max_tokens=1500)
                     extracted = self._parse_json_response(response)
@@ -196,15 +174,15 @@ class OpenAIProvider(AIProvider):
                     # Merge search result with AI extraction
                     return {
                         "found": True,
-                        "description": extracted.get('description', search_result.description),
-                        "requirements": extracted.get('requirements', search_result.requirements),
-                        "salary_range": extracted.get('salary_range') or search_result.salary_range,
-                        "benefits": extracted.get('benefits', search_result.benefits),
+                        "description": extracted.get("description", search_result.description),
+                        "requirements": extracted.get("requirements", search_result.requirements),
+                        "salary_range": extracted.get("salary_range") or search_result.salary_range,
+                        "benefits": extracted.get("benefits", search_result.benefits),
                         "source_url": search_result.source_url,
-                        "location": extracted.get('location'),
-                        "job_type": extracted.get('job_type'),
-                        "experience_level": extracted.get('experience_level'),
-                        "enrichment_status": "success"
+                        "location": extracted.get("location"),
+                        "job_type": extracted.get("job_type"),
+                        "experience_level": extracted.get("experience_level"),
+                        "enrichment_status": "success",
                     }
                 except Exception as e:
                     logger.warning(f"AI extraction failed, using raw search: {e}")
@@ -217,22 +195,13 @@ class OpenAIProvider(AIProvider):
             return {
                 "found": False,
                 "enrichment_status": "not_supported",
-                "error": "Web search enrichment dependencies not installed."
+                "error": "Web search enrichment dependencies not installed.",
             }
         except Exception as e:
             logger.error(f"Search job description error: {e}")
-            return {
-                "found": False,
-                "enrichment_status": "error",
-                "error": str(e)
-            }
+            return {"found": False, "enrichment_status": "error", "error": str(e)}
 
-    def classify_email(
-        self,
-        subject: str,
-        sender: str,
-        body: str
-    ) -> Dict[str, Any]:
+    def classify_email(self, subject: str, sender: str, body: str) -> Dict[str, Any]:
         """Classify an email for job-search relevance."""
         prompt = build_classify_email_prompt(subject, sender, body)
 
@@ -246,12 +215,12 @@ class OpenAIProvider(AIProvider):
                 "classification": "other",
                 "confidence": 0.0,
                 "company": None,
-                "summary": f"Classification failed: {e}"
+                "summary": f"Classification failed: {e}",
             }
 
 
 # Legacy support function
 def get_openai_provider(model: Optional[str] = None) -> OpenAIProvider:
     """Get OpenAI provider instance."""
-    config = {'ai': {'model': model}} if model else {}
+    config = {"ai": {"model": model}} if model else {}
     return OpenAIProvider(config)

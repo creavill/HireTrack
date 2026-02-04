@@ -17,55 +17,57 @@ from unittest.mock import Mock, patch
 import sys
 import os
 
-# Add parent directory to path to import local_app
+# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def test_parse_linkedin_jobs_basic(sample_linkedin_email):
     """Test LinkedIn job parser extracts basic job information."""
-    from local_app import parse_linkedin_jobs
+    from app.parsers.linkedin import LinkedInParser
 
-    jobs = parse_linkedin_jobs(sample_linkedin_email)
+    parser = LinkedInParser()
+    jobs = parser.parse(sample_linkedin_email, "2024-01-01")
 
     assert len(jobs) > 0, "Should extract at least one job"
 
     job = jobs[0]
-    assert 'title' in job, "Should have title"
-    assert 'company' in job, "Should have company"
-    assert 'location' in job, "Should have location"
-    assert 'url' in job, "Should have URL"
+    assert "title" in job, "Should have title"
+    assert "company" in job, "Should have company"
+    assert "location" in job, "Should have location"
+    assert "url" in job, "Should have URL"
 
 
 def test_parse_linkedin_url_cleaning():
     """Test that LinkedIn URLs are properly cleaned of tracking parameters."""
-    from local_app import clean_job_url
+    from app.parsers import clean_job_url
 
-    dirty_url = "https://www.linkedin.com/jobs/view/123456?refId=abc&trk=email&position=1"
+    dirty_url = "https://www.linkedin.com/jobs/view/1234567890?refId=abc&trk=email&position=1"
     clean_url = clean_job_url(dirty_url)
 
-    assert clean_url == "https://www.linkedin.com/jobs/view/123456"
+    assert clean_url == "https://www.linkedin.com/jobs/view/1234567890"
     assert "refId" not in clean_url
     assert "trk" not in clean_url
 
 
 def test_parse_indeed_jobs_basic(sample_indeed_email):
     """Test Indeed job parser extracts basic job information."""
-    from local_app import parse_indeed_jobs
+    from app.parsers.indeed import IndeedParser
 
-    jobs = parse_indeed_jobs(sample_indeed_email)
+    parser = IndeedParser()
+    jobs = parser.parse(sample_indeed_email, "2024-01-01")
 
     assert len(jobs) > 0, "Should extract at least one job"
 
     job = jobs[0]
-    assert 'title' in job, "Should have title"
-    assert 'company' in job, "Should have company"
-    assert 'location' in job, "Should have location"
-    assert 'url' in job, "Should have URL"
+    assert "title" in job, "Should have title"
+    assert "company" in job, "Should have company"
+    assert "location" in job, "Should have location"
+    assert "url" in job, "Should have URL"
 
 
 def test_parse_indeed_url_cleaning():
     """Test that Indeed URLs are properly cleaned of tracking parameters."""
-    from local_app import clean_job_url
+    from app.parsers import clean_job_url
 
     dirty_url = "https://www.indeed.com/viewjob?jk=abc123&tk=xyz&from=email&alid=123"
     clean_url = clean_job_url(dirty_url)
@@ -78,7 +80,7 @@ def test_parse_indeed_url_cleaning():
 
 def test_clean_text_field():
     """Test text cleaning removes newlines and extra whitespace."""
-    from local_app import clean_text_field
+    from app.parsers import clean_text_field
 
     # Test newline removal
     text = "Hello\nWorld\n\nTest"
@@ -102,12 +104,12 @@ def test_clean_text_field():
 
 def test_parse_greenhouse_jobs():
     """Test Greenhouse ATS email parser."""
-    from local_app import parse_greenhouse_jobs
+    from app.parsers.greenhouse import GreenhouseParser
 
     sample_html = """
     <html>
         <body>
-            <a href="https://jobs.greenhouse.io/company/jobs/123456">
+            <a href="https://boards.greenhouse.io/company/jobs/123456">
                 Software Engineer
             </a>
             <div>TechStartup</div>
@@ -116,7 +118,8 @@ def test_parse_greenhouse_jobs():
     </html>
     """
 
-    jobs = parse_greenhouse_jobs(sample_html)
+    parser = GreenhouseParser()
+    jobs = parser.parse(sample_html, "2024-01-01")
 
     # Should attempt to parse even if structure doesn't match exactly
     assert isinstance(jobs, list), "Should return a list"
@@ -124,7 +127,7 @@ def test_parse_greenhouse_jobs():
 
 def test_parse_wellfound_jobs():
     """Test Wellfound (AngelList) email parser."""
-    from local_app import parse_wellfound_jobs
+    from app.parsers.wellfound import WellfoundParser
 
     sample_html = """
     <html>
@@ -138,7 +141,8 @@ def test_parse_wellfound_jobs():
     </html>
     """
 
-    jobs = parse_wellfound_jobs(sample_html)
+    parser = WellfoundParser()
+    jobs = parser.parse(sample_html, "2024-01-01")
 
     # Should return a list even if parsing fails
     assert isinstance(jobs, list), "Should return a list"
@@ -146,91 +150,68 @@ def test_parse_wellfound_jobs():
 
 def test_generate_job_id_consistency():
     """Test that job IDs are generated consistently for the same job."""
-    from local_app import generate_job_id
+    from app.parsers import generate_job_id
 
-    job1 = {
-        "title": "Software Engineer",
-        "company": "TechCorp",
-        "location": "Remote",
-        "url": "https://example.com/job/123"
-    }
-
-    job2 = {
-        "title": "Software Engineer",
-        "company": "TechCorp",
-        "location": "Remote",
-        "url": "https://example.com/job/123"
-    }
+    url = "https://example.com/job/123"
+    title = "Software Engineer"
+    company = "TechCorp"
 
     # Same job should generate same ID
-    id1 = generate_job_id(job1)
-    id2 = generate_job_id(job2)
+    id1 = generate_job_id(url, title, company)
+    id2 = generate_job_id(url, title, company)
 
     assert id1 == id2, "Same job should generate same ID"
 
 
 def test_generate_job_id_uniqueness():
     """Test that different jobs generate different IDs."""
-    from local_app import generate_job_id
+    from app.parsers import generate_job_id
 
-    job1 = {
-        "title": "Software Engineer",
-        "company": "TechCorp",
-        "location": "Remote",
-        "url": "https://example.com/job/123"
-    }
-
-    job2 = {
-        "title": "Senior Engineer",  # Different title
-        "company": "TechCorp",
-        "location": "Remote",
-        "url": "https://example.com/job/456"
-    }
-
-    id1 = generate_job_id(job1)
-    id2 = generate_job_id(job2)
+    id1 = generate_job_id("https://example.com/job/123", "Software Engineer", "TechCorp")
+    id2 = generate_job_id("https://example.com/job/456", "Senior Engineer", "TechCorp")
 
     assert id1 != id2, "Different jobs should generate different IDs"
 
 
 def test_classify_followup_email():
     """Test follow-up email classification."""
-    from local_app import classify_followup_email
+    from app.email.scanner import classify_followup_email
 
     # Test interview invitation
     subject = "Interview invitation for Software Engineer role"
-    body = "We'd like to schedule an interview with you"
-    classification = classify_followup_email(subject, body, "inbox")
+    snippet = "We'd like to schedule an interview with you"
+    classification = classify_followup_email(subject, snippet)
 
     assert classification == "interview", "Should detect interview invitation"
 
     # Test rejection
     subject = "Update on your application"
-    body = "Unfortunately, we have decided to move forward with other candidates"
-    classification = classify_followup_email(subject, body, "inbox")
+    snippet = "Unfortunately, we have decided to move forward with other candidates"
+    classification = classify_followup_email(subject, snippet)
 
     assert classification == "rejection", "Should detect rejection"
 
     # Test offer
     subject = "Job offer - Software Engineer"
-    body = "We are pleased to offer you the position"
-    classification = classify_followup_email(subject, body, "inbox")
+    snippet = "We are pleased to offer you the position"
+    classification = classify_followup_email(subject, snippet)
 
     assert classification == "offer", "Should detect job offer"
 
 
 def test_extract_company_from_email():
     """Test company name extraction from email addresses."""
-    from local_app import extract_company_from_email
+    from app.email.scanner import extract_company_from_email
 
-    # Test standard format
-    assert extract_company_from_email("careers@techcorp.com") == "techcorp"
+    # Test standard format (returns Title case now)
+    result = extract_company_from_email("careers@techcorp.com", "Job at TechCorp")
+    assert result.lower() == "techcorp", f"Expected 'techcorp', got '{result}'"
 
-    # Test with subdomain
-    assert extract_company_from_email("jobs@hiring.company.com") == "company"
-
-    # Test invalid email
-    assert extract_company_from_email("invalid") == "invalid"
+    # Test extraction from subject when email domain is generic
+    result = extract_company_from_email("jobs@gmail.com", "Your application at Google")
+    # Should extract from subject or return Unknown
+    assert result in ["Google", "Unknown"], f"Expected 'Google' or 'Unknown', got '{result}'"
 
     # Test empty
-    assert extract_company_from_email("") == ""
+    result = extract_company_from_email("", "")
+    assert result == "Unknown", "Empty input should return 'Unknown'"

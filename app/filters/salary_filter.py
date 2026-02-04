@@ -16,40 +16,47 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SalaryFilterResult:
     """Result of salary filtering."""
+
     status: str  # 'match', 'above_target', 'below_minimum', 'unknown'
     min_salary: Optional[int] = None  # Parsed minimum salary
     max_salary: Optional[int] = None  # Parsed maximum salary
     is_hourly: bool = False  # True if salary is hourly rate
     is_annual: bool = True  # True if salary is annual
-    confidence: str = 'high'  # 'high', 'medium', 'low'
-    raw_string: str = ''  # Original salary string
+    confidence: str = "high"  # 'high', 'medium', 'low'
+    raw_string: str = ""  # Original salary string
 
 
 # Salary range patterns
 SALARY_PATTERNS = [
     # "$100,000 - $150,000" or "$100k - $150k"
-    r'\$\s*(\d+(?:,\d{3})*(?:k)?)\s*[-–—to]+\s*\$?\s*(\d+(?:,\d{3})*(?:k)?)',
+    r"\$\s*(\d+(?:,\d{3})*(?:k)?)\s*[-–—to]+\s*\$?\s*(\d+(?:,\d{3})*(?:k)?)",
     # "$100,000-$150,000" (no spaces)
-    r'\$\s*(\d+(?:,\d{3})*(?:k)?)\s*[-–—]\s*\$?\s*(\d+(?:,\d{3})*(?:k)?)',
+    r"\$\s*(\d+(?:,\d{3})*(?:k)?)\s*[-–—]\s*\$?\s*(\d+(?:,\d{3})*(?:k)?)",
     # "100k - 150k" without $
-    r'(\d+(?:,\d{3})*(?:k))\s*[-–—to]+\s*(\d+(?:,\d{3})*(?:k))',
+    r"(\d+(?:,\d{3})*(?:k))\s*[-–—to]+\s*(\d+(?:,\d{3})*(?:k))",
     # "$100,000" single value
-    r'\$\s*(\d+(?:,\d{3})*(?:k)?)\s*(?:per\s+(?:year|annum|annually))?',
+    r"\$\s*(\d+(?:,\d{3})*(?:k)?)\s*(?:per\s+(?:year|annum|annually))?",
     # "100k" single value
-    r'(\d+k)\s*(?:per\s+(?:year|annum|annually))?',
+    r"(\d+k)\s*(?:per\s+(?:year|annum|annually))?",
 ]
 
 # Hourly rate patterns
 HOURLY_PATTERNS = [
-    r'\$\s*(\d+(?:\.\d{2})?)\s*[-–—to/]+\s*\$?\s*(\d+(?:\.\d{2})?)\s*(?:per\s+)?(?:hour|hr)',
-    r'\$\s*(\d+(?:\.\d{2})?)\s*/?\s*(?:hour|hr)',
-    r'(\d+(?:\.\d{2})?)\s*/?\s*(?:hour|hr)',
+    r"\$\s*(\d+(?:\.\d{2})?)\s*[-–—to/]+\s*\$?\s*(\d+(?:\.\d{2})?)\s*(?:per\s+)?(?:hour|hr)",
+    r"\$\s*(\d+(?:\.\d{2})?)\s*/?\s*(?:hour|hr)",
+    r"(\d+(?:\.\d{2})?)\s*/?\s*(?:hour|hr)",
 ]
 
 # Words that indicate this is not actually a salary
 EXCLUDE_KEYWORDS = [
-    'experience', 'years', 'employees', 'team size', 'revenue',
-    'funding', 'valuation', 'headcount',
+    "experience",
+    "years",
+    "employees",
+    "team size",
+    "revenue",
+    "funding",
+    "valuation",
+    "headcount",
 ]
 
 
@@ -67,10 +74,10 @@ def _parse_salary_value(value_str: str) -> int:
         return 0
 
     # Remove commas and whitespace
-    value_str = value_str.replace(',', '').replace(' ', '').strip()
+    value_str = value_str.replace(",", "").replace(" ", "").strip()
 
     # Handle 'k' suffix
-    if value_str.lower().endswith('k'):
+    if value_str.lower().endswith("k"):
         try:
             return int(float(value_str[:-1]) * 1000)
         except ValueError:
@@ -125,14 +132,14 @@ def parse_salary_string(salary_str: str) -> Tuple[Optional[int], Optional[int], 
                 min_salary = _parse_salary_value(groups[0])
                 max_salary = _parse_salary_value(groups[1])
                 # Sanity check - if values are small, might be in thousands
-                if min_salary < 1000 and 'k' not in groups[0].lower():
+                if min_salary < 1000 and "k" not in groups[0].lower():
                     min_salary *= 1000
-                if max_salary < 1000 and 'k' not in groups[1].lower():
+                if max_salary < 1000 and "k" not in groups[1].lower():
                     max_salary *= 1000
                 return min_salary, max_salary, False
             elif groups[0]:
                 salary = _parse_salary_value(groups[0])
-                if salary < 1000 and 'k' not in groups[0].lower():
+                if salary < 1000 and "k" not in groups[0].lower():
                     salary *= 1000
                 return salary, salary, False
 
@@ -140,9 +147,7 @@ def parse_salary_string(salary_str: str) -> Tuple[Optional[int], Optional[int], 
 
 
 def normalize_salary_range(
-    min_salary: Optional[int],
-    max_salary: Optional[int],
-    is_hourly: bool = False
+    min_salary: Optional[int], max_salary: Optional[int], is_hourly: bool = False
 ) -> Tuple[Optional[int], Optional[int]]:
     """
     Normalize salary range to annual values.
@@ -169,10 +174,7 @@ def normalize_salary_range(
 
 
 def filter_salary(
-    job_salary: str,
-    minimum_salary: int = 0,
-    target_salary: int = 0,
-    currency: str = 'USD'
+    job_salary: str, minimum_salary: int = 0, target_salary: int = 0, currency: str = "USD"
 ) -> SalaryFilterResult:
     """
     Filter a job based on salary.
@@ -187,11 +189,7 @@ def filter_salary(
         SalaryFilterResult with status and parsed values
     """
     if not job_salary:
-        return SalaryFilterResult(
-            status='unknown',
-            confidence='low',
-            raw_string=''
-        )
+        return SalaryFilterResult(status="unknown", confidence="low", raw_string="")
 
     # Parse salary string
     min_sal, max_sal, is_hourly = parse_salary_string(job_salary)
@@ -201,26 +199,22 @@ def filter_salary(
 
     # If we couldn't parse anything
     if annual_min is None and annual_max is None:
-        return SalaryFilterResult(
-            status='unknown',
-            confidence='low',
-            raw_string=job_salary
-        )
+        return SalaryFilterResult(status="unknown", confidence="low", raw_string=job_salary)
 
     # Create result with parsed values
     result = SalaryFilterResult(
-        status='unknown',
+        status="unknown",
         min_salary=annual_min,
         max_salary=annual_max,
         is_hourly=is_hourly,
         is_annual=not is_hourly,
-        raw_string=job_salary
+        raw_string=job_salary,
     )
 
     # If no preferences set, just return parsed values
     if minimum_salary == 0 and target_salary == 0:
-        result.status = 'unknown'
-        result.confidence = 'high'  # We parsed it, just no preferences to check
+        result.status = "unknown"
+        result.confidence = "high"  # We parsed it, just no preferences to check
         return result
 
     # Use max_salary for comparison if available, otherwise min
@@ -229,21 +223,21 @@ def filter_salary(
     # Check against minimum
     if minimum_salary > 0:
         if job_salary_check and job_salary_check < minimum_salary:
-            result.status = 'below_minimum'
-            result.confidence = 'high'
+            result.status = "below_minimum"
+            result.confidence = "high"
             return result
 
     # Check against target
     if target_salary > 0:
         if job_salary_check and job_salary_check >= target_salary:
-            result.status = 'above_target'
-            result.confidence = 'high'
+            result.status = "above_target"
+            result.confidence = "high"
             return result
 
     # Salary is acceptable (between minimum and target, or no restrictions violated)
     if annual_min or annual_max:
-        result.status = 'match'
-        result.confidence = 'high'
+        result.status = "match"
+        result.confidence = "high"
 
     return result
 
@@ -259,20 +253,18 @@ def filter_salary_from_config(job_salary: str, config: Any) -> SalaryFilterResul
     Returns:
         SalaryFilterResult
     """
-    salary_prefs = getattr(config, '_config', {}).get('preferences', {}).get('salary', {})
+    salary_prefs = getattr(config, "_config", {}).get("preferences", {}).get("salary", {})
 
     return filter_salary(
         job_salary=job_salary,
-        minimum_salary=salary_prefs.get('minimum', 0),
-        target_salary=salary_prefs.get('target', 0),
-        currency=salary_prefs.get('currency', 'USD')
+        minimum_salary=salary_prefs.get("minimum", 0),
+        target_salary=salary_prefs.get("target", 0),
+        currency=salary_prefs.get("currency", "USD"),
     )
 
 
 def format_salary_range(
-    min_salary: Optional[int],
-    max_salary: Optional[int],
-    currency: str = 'USD'
+    min_salary: Optional[int], max_salary: Optional[int], currency: str = "USD"
 ) -> str:
     """
     Format a salary range for display.
@@ -286,9 +278,9 @@ def format_salary_range(
         Formatted string like "$100,000 - $150,000"
     """
     if min_salary is None and max_salary is None:
-        return ''
+        return ""
 
-    symbol = '$' if currency == 'USD' else currency + ' '
+    symbol = "$" if currency == "USD" else currency + " "
 
     def format_value(val):
         if val >= 1000:
@@ -302,4 +294,4 @@ def format_salary_range(
     elif min_salary:
         return f"{format_value(min_salary)}+"
 
-    return ''
+    return ""

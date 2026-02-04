@@ -24,14 +24,14 @@ from .salary_filter import (
 
 __all__ = [
     # Location filter
-    'LocationFilterResult',
-    'filter_location',
-    'normalize_location',
-    'is_remote_location',
-    'parse_location_parts',
+    "LocationFilterResult",
+    "filter_location",
+    "normalize_location",
+    "is_remote_location",
+    "parse_location_parts",
     # Salary filter
-    'SalaryFilterResult',
-    'filter_salary',
-    'parse_salary_string',
-    'normalize_salary_range',
+    "SalaryFilterResult",
+    "filter_salary",
+    "parse_salary_string",
+    "normalize_salary_range",
 ]

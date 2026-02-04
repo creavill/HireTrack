@@ -18,8 +18,7 @@ from app.database import DB_PATH
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -39,6 +38,7 @@ def main():
     # Automatic backup on startup
     try:
         from backup_manager import backup_on_startup
+
         logger.info("Creating automatic backup...")
         backup_on_startup()
         logger.info("Backup created successfully")
@@ -48,6 +48,7 @@ def main():
     # Resume migration
     try:
         from resume_manager import migrate_file_resumes_to_db
+
         migrate_file_resumes_to_db()
     except Exception as e:
         logger.warning(f"Resume migration skipped: {e}")
@@ -71,8 +72,8 @@ def main():
     logger.info("=" * 60 + "\n")
 
     # Run Flask app
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

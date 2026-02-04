@@ -1,18 +1,32 @@
-# Environment & Secrets
+# === Secrets & Credentials ===
 .env
-config.yaml
+.env.*
 credentials.json
 token.json
+token.pickle
 
-# Database
+# === Database ===
 *.db
-*.db-shm
+*.db-journal
 *.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
+jobs.db
 backups/
 
-# Python
+# === User Data (not for public repo) ===
+resumes/*.txt
+resumes/*.md
+resumes/*.pdf
+!resumes/templates/
+config.yaml
+!config.example.yaml
+
+# === Cached Logos ===
+static/logos/
+
+# === Python ===
 __pycache__/
 *.py[cod]
 *$py.class
@@ -26,49 +40,38 @@ ENV/
 dist/
 build/
 
-# Node
+# === Node ===
 node_modules/
+frontend/dist/
+frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# IDE
+# === IDE ===
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# === OS ===
 .DS_Store
 Thumbs.db
 
-# AWS SAM
+# === AWS SAM ===
 .aws-sam/
 samconfig.toml
 
-# Build outputs
-frontend/dist/
+# === Build outputs ===
 *.zip
 
-# Logs
+# === Logs ===
 *.log
 logs/
 
-# Cover letters (generated)
+# === Cover letters (generated) ===
 cover_letters/
 
-# Personal resumes (keep templates)
-resumes/*.txt
-!resumes/templates/*.txt
-
-# Personal data files
+# === Personal data files ===
 cover_letter_template.txt
-*.txt
-!resumes/templates/*.txt
-!README*.txt
-!requirements*.txt
-!LICENSE.txt
-
-# Old build artifacts and backups
-mnt/

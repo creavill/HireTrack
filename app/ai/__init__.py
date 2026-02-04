@@ -43,25 +43,25 @@ from .analyzer import (
 
 __all__ = [
     # Base
-    'AIProvider',
-    'BaseAIProvider',  # Backwards compatibility alias
+    "AIProvider",
+    "BaseAIProvider",  # Backwards compatibility alias
     # Providers
-    'ClaudeProvider',
-    'get_claude_provider',
-    'OpenAIProvider',
-    'get_openai_provider',
-    'GeminiProvider',
-    'get_gemini_provider',
+    "ClaudeProvider",
+    "get_claude_provider",
+    "OpenAIProvider",
+    "get_openai_provider",
+    "GeminiProvider",
+    "get_gemini_provider",
     # Factory
-    'get_provider',
-    'get_available_providers',
-    'get_provider_info',
+    "get_provider",
+    "get_available_providers",
+    "get_provider_info",
     # Analyzer functions
-    'ai_filter_and_score',
-    'analyze_job',
-    'generate_cover_letter',
-    'generate_interview_answer',
-    'classify_email',
-    'search_job_description',
-    'calculate_weighted_score',
+    "ai_filter_and_score",
+    "analyze_job",
+    "generate_cover_letter",
+    "generate_interview_answer",
+    "classify_email",
+    "search_job_description",
+    "calculate_weighted_score",
 ]

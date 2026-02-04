@@ -12,15 +12,17 @@ from typing import Dict, Any, Optional
 
 from app.database import DB_PATH, get_db
 from app.ai import get_provider
-from app.filters.salary_filter import parse_salary_string, normalize_salary_range, format_salary_range
+from app.filters.salary_filter import (
+    parse_salary_string,
+    normalize_salary_range,
+    format_salary_range,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def rescore_after_enrichment(
-    job_id: str,
-    salary_estimate: Optional[str] = None,
-    conn: Optional[sqlite3.Connection] = None
+    job_id: str, salary_estimate: Optional[str] = None, conn: Optional[sqlite3.Connection] = None
 ) -> Dict[str, Any]:
     """
     Re-score a job based on enriched data.
@@ -43,24 +45,18 @@ def rescore_after_enrichment(
         conn = get_db()
         should_close = True
 
-    result = {
-        "rescored": False,
-        "adjustment": 0,
-        "reasons": [],
-        "new_score": None
-    }
+    result = {"rescored": False, "adjustment": 0, "reasons": [], "new_score": None}
 
     try:
         # Get current job data
         job = conn.execute(
-            "SELECT score, baseline_score, is_aggregator FROM jobs WHERE job_id = ?",
-            (job_id,)
+            "SELECT score, baseline_score, is_aggregator FROM jobs WHERE job_id = ?", (job_id,)
         ).fetchone()
 
         if not job:
             return result
 
-        current_score = job['score'] or job['baseline_score'] or 0
+        current_score = job["score"] or job["baseline_score"] or 0
         adjustment = 0
         reasons = []
 
@@ -68,10 +64,11 @@ def rescore_after_enrichment(
         if salary_estimate:
             try:
                 from app.config import get_config
+
                 config = get_config()
-                salary_prefs = config._config.get('preferences', {}).get('salary', {})
-                min_salary = salary_prefs.get('minimum', 0)
-                target_salary = salary_prefs.get('target', 0)
+                salary_prefs = config._config.get("preferences", {}).get("salary", {})
+                min_salary = salary_prefs.get("minimum", 0)
+                target_salary = salary_prefs.get("target", 0)
 
                 if min_salary or target_salary:
                     min_sal, max_sal, is_hourly = parse_salary_string(salary_estimate)
@@ -96,7 +93,7 @@ def rescore_after_enrichment(
                 logger.debug(f"Salary scoring failed: {e}")
 
         # Penalty for staffing agencies
-        if job['is_aggregator']:
+        if job["is_aggregator"]:
             adjustment -= 10
             reasons.append("Staffing agency posting")
 
@@ -104,10 +101,7 @@ def rescore_after_enrichment(
         if adjustment != 0:
             new_score = max(0, min(100, current_score + adjustment))
 
-            conn.execute(
-                "UPDATE jobs SET score = ? WHERE job_id = ?",
-                (new_score, job_id)
-            )
+            conn.execute("UPDATE jobs SET score = ? WHERE job_id = ?", (new_score, job_id))
             conn.commit()
 
             result["rescored"] = True
@@ -127,10 +121,7 @@ def rescore_after_enrichment(
             conn.close()
 
 
-def enrich_job(
-    job_id: str,
-    force: bool = False
-) -> Dict[str, Any]:
+def enrich_job(job_id: str, force: bool = False) -> Dict[str, Any]:
     """
     Enrich a job with additional data from web search.
 
@@ -155,55 +146,36 @@ def enrich_job(
 
     try:
         # Get job from database
-        job = conn.execute(
-            "SELECT * FROM jobs WHERE job_id = ?",
-            (job_id,)
-        ).fetchone()
+        job = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
 
         if not job:
-            return {
-                "success": False,
-                "job_id": job_id,
-                "error": "Job not found"
-            }
+            return {"success": False, "job_id": job_id, "error": "Job not found"}
 
         # Check if already enriched (unless forcing)
-        if not force and job['last_enriched']:
+        if not force and job["last_enriched"]:
             return {
                 "success": True,
                 "job_id": job_id,
                 "enriched_fields": [],
                 "message": "Already enriched",
-                "last_enriched": job['last_enriched']
+                "last_enriched": job["last_enriched"],
             }
 
         # Get job details
-        company = job['company']
-        title = job['title']
+        company = job["company"]
+        title = job["title"]
 
-        return enrich_job_data(
-            job_id=job_id,
-            company=company,
-            title=title,
-            conn=conn
-        )
+        return enrich_job_data(job_id=job_id, company=company, title=title, conn=conn)
 
     except Exception as e:
         logger.error(f"Enrichment error for job {job_id}: {e}")
-        return {
-            "success": False,
-            "job_id": job_id,
-            "error": str(e)
-        }
+        return {"success": False, "job_id": job_id, "error": str(e)}
     finally:
         conn.close()
 
 
 def enrich_job_data(
-    job_id: str,
-    company: str,
-    title: str,
-    conn: Optional[sqlite3.Connection] = None
+    job_id: str, company: str, title: str, conn: Optional[sqlite3.Connection] = None
 ) -> Dict[str, Any]:
     """
     Enrich job data and update database.
@@ -230,7 +202,7 @@ def enrich_job_data(
         "salary_confidence": "none",
         "full_description": None,
         "source_url": None,
-        "error": None
+        "error": None,
     }
 
     try:
@@ -241,9 +213,9 @@ def enrich_job_data(
         logger.info(f"Enriching job: {title} at {company}")
         search_result = provider.search_job_description(company, title)
 
-        if not search_result.get('found'):
-            result["error"] = search_result.get('error', 'Job not found in search')
-            result["enrichment_status"] = search_result.get('enrichment_status', 'not_found')
+        if not search_result.get("found"):
+            result["error"] = search_result.get("error", "Job not found in search")
+            result["enrichment_status"] = search_result.get("enrichment_status", "not_found")
             return result
 
         # Process enrichment results
@@ -251,7 +223,7 @@ def enrich_job_data(
         update_values = {"last_enriched": datetime.now().isoformat()}
 
         # Extract salary information
-        salary_str = search_result.get('salary_range')
+        salary_str = search_result.get("salary_range")
         if salary_str:
             min_sal, max_sal, is_hourly = parse_salary_string(salary_str)
             annual_min, annual_max = normalize_salary_range(min_sal, max_sal, is_hourly)
@@ -259,7 +231,9 @@ def enrich_job_data(
             if annual_min or annual_max:
                 salary_estimate = format_salary_range(annual_min, annual_max)
                 update_values["salary_estimate"] = salary_estimate
-                update_values["salary_confidence"] = "high" if annual_min and annual_max else "medium"
+                update_values["salary_confidence"] = (
+                    "high" if annual_min and annual_max else "medium"
+                )
                 result["salary_estimate"] = salary_estimate
                 result["salary_confidence"] = update_values["salary_confidence"]
                 enriched_fields.append("salary_estimate")
@@ -267,14 +241,16 @@ def enrich_job_data(
             update_values["salary_confidence"] = "none"
 
         # Extract full description
-        description = search_result.get('description')
+        description = search_result.get("description")
         if description and len(description) > 100:
             update_values["full_description"] = description[:10000]  # Max 10k chars
-            result["full_description"] = description[:1000] + "..." if len(description) > 1000 else description
+            result["full_description"] = (
+                description[:1000] + "..." if len(description) > 1000 else description
+            )
             enriched_fields.append("full_description")
 
         # Extract source URL
-        source_url = search_result.get('source_url')
+        source_url = search_result.get("source_url")
         if source_url:
             update_values["enrichment_source"] = source_url
             result["source_url"] = source_url
@@ -285,17 +261,12 @@ def enrich_job_data(
             set_clause = ", ".join([f"{k} = ?" for k in update_values.keys()])
             values = list(update_values.values()) + [job_id]
 
-            conn.execute(
-                f"UPDATE jobs SET {set_clause} WHERE job_id = ?",
-                values
-            )
+            conn.execute(f"UPDATE jobs SET {set_clause} WHERE job_id = ?", values)
             conn.commit()
 
         # Auto re-score based on new data
         rescore_result = rescore_after_enrichment(
-            job_id=job_id,
-            salary_estimate=result.get("salary_estimate"),
-            conn=conn
+            job_id=job_id, salary_estimate=result.get("salary_estimate"), conn=conn
         )
         result["rescored"] = rescore_result.get("rescored", False)
         result["score_adjustment"] = rescore_result.get("adjustment", 0)
@@ -317,10 +288,7 @@ def enrich_job_data(
             conn.close()
 
 
-def enrich_jobs_batch(
-    job_ids: list,
-    max_jobs: int = 10
-) -> Dict[str, Any]:
+def enrich_jobs_batch(job_ids: list, max_jobs: int = 10) -> Dict[str, Any]:
     """
     Enrich multiple jobs in a batch.
 
@@ -350,12 +318,7 @@ def enrich_jobs_batch(
         else:
             failed += 1
 
-    return {
-        "total": len(results),
-        "successful": successful,
-        "failed": failed,
-        "results": results
-    }
+    return {"total": len(results), "successful": successful, "failed": failed, "results": results}
 
 
 def get_unenriched_jobs(limit: int = 10, min_score: int = 0) -> list:
@@ -371,7 +334,8 @@ def get_unenriched_jobs(limit: int = 10, min_score: int = 0) -> list:
     """
     conn = get_db()
     try:
-        jobs = conn.execute("""
+        jobs = conn.execute(
+            """
             SELECT job_id, title, company, baseline_score, status
             FROM jobs
             WHERE last_enriched IS NULL
@@ -379,17 +343,16 @@ def get_unenriched_jobs(limit: int = 10, min_score: int = 0) -> list:
               AND baseline_score >= ?
             ORDER BY baseline_score DESC
             LIMIT ?
-        """, (min_score, limit)).fetchall()
+        """,
+            (min_score, limit),
+        ).fetchall()
 
         return [dict(job) for job in jobs]
     finally:
         conn.close()
 
 
-def auto_enrich_top_jobs(
-    count: int = 5,
-    min_score: int = 50
-) -> Dict[str, Any]:
+def auto_enrich_top_jobs(count: int = 5, min_score: int = 50) -> Dict[str, Any]:
     """
     Automatically enrich top-scoring unenriched jobs.
 
@@ -401,7 +364,7 @@ def auto_enrich_top_jobs(
         Batch enrichment results
     """
     unenriched = get_unenriched_jobs(limit=count, min_score=min_score)
-    job_ids = [job['job_id'] for job in unenriched]
+    job_ids = [job["job_id"] for job in unenriched]
 
     if not job_ids:
         return {
@@ -409,7 +372,7 @@ def auto_enrich_top_jobs(
             "successful": 0,
             "failed": 0,
             "results": [],
-            "message": "No unenriched jobs found matching criteria"
+            "message": "No unenriched jobs found matching criteria",
         }
 
     return enrich_jobs_batch(job_ids, max_jobs=count)

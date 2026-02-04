@@ -50,10 +50,7 @@ class AIProvider(ABC):
 
     @abstractmethod
     def filter_and_score(
-        self,
-        job_data: Dict[str, Any],
-        resume_text: str,
-        preferences: Dict[str, Any]
+        self, job_data: Dict[str, Any], resume_text: str, preferences: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         AI-based job filtering and baseline scoring.
@@ -99,11 +96,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    def analyze_job(
-        self,
-        job_data: Dict[str, Any],
-        resume_text: str
-    ) -> Dict[str, Any]:
+    def analyze_job(self, job_data: Dict[str, Any], resume_text: str) -> Dict[str, Any]:
         """
         Perform detailed job qualification analysis.
 
@@ -146,10 +139,7 @@ class AIProvider(ABC):
 
     @abstractmethod
     def generate_cover_letter(
-        self,
-        job: Dict[str, Any],
-        resume_text: str,
-        analysis: Optional[Dict[str, Any]] = None
+        self, job: Dict[str, Any], resume_text: str, analysis: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Generate a tailored cover letter for the job.
@@ -177,7 +167,7 @@ class AIProvider(ABC):
         question: str,
         job: Dict[str, Any],
         resume_text: str,
-        analysis: Optional[Dict[str, Any]] = None
+        analysis: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Generate an interview answer for the given question.
@@ -204,11 +194,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    def search_job_description(
-        self,
-        company: str,
-        title: str
-    ) -> Dict[str, Any]:
+    def search_job_description(self, company: str, title: str) -> Dict[str, Any]:
         """
         Search for and enrich job description data.
 
@@ -247,12 +233,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    def classify_email(
-        self,
-        subject: str,
-        sender: str,
-        body: str
-    ) -> Dict[str, Any]:
+    def classify_email(self, subject: str, sender: str, body: str) -> Dict[str, Any]:
         """
         Classify an email for job-search relevance.
 
@@ -323,7 +304,7 @@ class AIProvider(ABC):
             pass
 
         # Try 2: Extract from markdown json code fence
-        json_fence_pattern = r'```json\s*([\s\S]*?)\s*```'
+        json_fence_pattern = r"```json\s*([\s\S]*?)\s*```"
         match = re.search(json_fence_pattern, text)
         if match:
             try:
@@ -332,7 +313,7 @@ class AIProvider(ABC):
                 pass
 
         # Try 3: Extract from generic code fence
-        code_fence_pattern = r'```\s*([\s\S]*?)\s*```'
+        code_fence_pattern = r"```\s*([\s\S]*?)\s*```"
         match = re.search(code_fence_pattern, text)
         if match:
             try:
@@ -341,7 +322,7 @@ class AIProvider(ABC):
                 pass
 
         # Try 4: Find JSON object in text (greedy match for outermost braces)
-        json_object_pattern = r'\{[\s\S]*\}'
+        json_object_pattern = r"\{[\s\S]*\}"
         match = re.search(json_object_pattern, text)
         if match:
             try:
@@ -350,7 +331,7 @@ class AIProvider(ABC):
                 pass
 
         # Try 5: Find JSON array in text
-        json_array_pattern = r'\[[\s\S]*\]'
+        json_array_pattern = r"\[[\s\S]*\]"
         match = re.search(json_array_pattern, text)
         if match:
             try:

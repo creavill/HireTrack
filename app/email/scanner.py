@@ -12,9 +12,14 @@ from typing import Optional, List, Dict
 
 from .client import get_gmail_service, get_email_body
 from app.parsers import (
-    parse_linkedin_jobs, parse_indeed_jobs,
-    parse_greenhouse_jobs, parse_wellfound_jobs,
-    get_parser_for_source, GenericAIParser, detect_source, parse_email
+    parse_linkedin_jobs,
+    parse_indeed_jobs,
+    parse_greenhouse_jobs,
+    parse_wellfound_jobs,
+    get_parser_for_source,
+    GenericAIParser,
+    detect_source,
+    parse_email,
 )
 from app.database import DB_PATH, get_db
 
@@ -40,14 +45,14 @@ def _load_email_sources():
 
     return [
         {
-            'id': s[0],
-            'name': s[1],
-            'sender_email': s[2],
-            'sender_pattern': s[3],
-            'subject_keywords': s[4],
-            'is_builtin': s[5],
-            'category': s[6],
-            'parser_class': s[7]
+            "id": s[0],
+            "name": s[1],
+            "sender_email": s[2],
+            "sender_pattern": s[3],
+            "subject_keywords": s[4],
+            "is_builtin": s[5],
+            "category": s[6],
+            "parser_class": s[7],
         }
         for s in sources
     ]
@@ -66,29 +71,33 @@ def _build_query_for_source(source: dict, after_date: str) -> Optional[str]:
     """
     query_parts = []
 
-    sender_email = source.get('sender_email', '')
-    sender_pattern = source.get('sender_pattern', '')
-    subject_keywords = source.get('subject_keywords', '')
+    sender_email = source.get("sender_email", "")
+    sender_pattern = source.get("sender_pattern", "")
+    subject_keywords = source.get("subject_keywords", "")
 
     if sender_email:
-        query_parts.append(f'from:{sender_email}')
+        query_parts.append(f"from:{sender_email}")
     elif sender_pattern:
         # Handle patterns like "@linkedin.com"
-        patterns = [p.strip() for p in sender_pattern.split(',')]
+        patterns = [p.strip() for p in sender_pattern.split(",")]
         if len(patterns) == 1:
-            query_parts.append(f'from:*{patterns[0]}' if patterns[0].startswith('@') else f'from:{patterns[0]}')
+            query_parts.append(
+                f"from:*{patterns[0]}" if patterns[0].startswith("@") else f"from:{patterns[0]}"
+            )
         else:
-            from_parts = ' OR '.join([f'from:*{p}' if p.startswith('@') else f'from:{p}' for p in patterns])
-            query_parts.append(f'({from_parts})')
+            from_parts = " OR ".join(
+                [f"from:*{p}" if p.startswith("@") else f"from:{p}" for p in patterns]
+            )
+            query_parts.append(f"({from_parts})")
 
     if subject_keywords:
-        keywords = [kw.strip() for kw in subject_keywords.split(',') if kw.strip()]
+        keywords = [kw.strip() for kw in subject_keywords.split(",") if kw.strip()]
         if keywords:
-            subject_part = ' OR '.join([f'subject:{kw}' for kw in keywords])
-            query_parts.append(f'({subject_part})')
+            subject_part = " OR ".join([f"subject:{kw}" for kw in keywords])
+            query_parts.append(f"({subject_part})")
 
     if query_parts:
-        return ' '.join(query_parts) + f' after:{after_date}'
+        return " ".join(query_parts) + f" after:{after_date}"
 
     return None
 
@@ -120,13 +129,13 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
         try:
             last_date = datetime.fromisoformat(last_scan[0])
             last_date = last_date + timedelta(seconds=1)
-            after_date = last_date.strftime('%Y/%m/%d')
+            after_date = last_date.strftime("%Y/%m/%d")
             logger.info(f"Scanning emails after last scan: {after_date}")
         except:
-            after_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
+            after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
             logger.warning(f"Date parse failed, scanning last {days_back} days: {after_date}")
     else:
-        after_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
+        after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
         logger.info(f"First scan - looking back {days_back} days: {after_date}")
 
     # Load email sources from database
@@ -139,11 +148,7 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
         query = _build_query_for_source(source, after_date)
         if query:
             parser = get_parser_for_source(source)
-            source_queries.append({
-                'query': query,
-                'source': source,
-                'parser': parser
-            })
+            source_queries.append({"query": query, "source": source, "parser": parser})
             logger.debug(f"Source '{source['name']}': {query}")
 
     # Add fallback queries for follow-up detection
@@ -158,37 +163,54 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
 
     # Process each source's query
     for sq in source_queries:
-        query = sq['query']
-        source_config = sq['source']
-        parser = sq['parser']
-        source_name = source_config['name']
+        query = sq["query"]
+        source_config = sq["source"]
+        parser = sq["parser"]
+        source_name = source_config["name"]
 
         try:
-            results = service.users().messages().list(userId='me', q=query, maxResults=100).execute()
-            messages = results.get('messages', [])
+            results = (
+                service.users().messages().list(userId="me", q=query, maxResults=100).execute()
+            )
+            messages = results.get("messages", [])
             total_emails += len(messages)
 
             source_jobs = 0
             for msg_info in messages:
                 try:
-                    message = service.users().messages().get(userId='me', id=msg_info['id'], format='full').execute()
-                    email_date = datetime.fromtimestamp(int(message.get('internalDate', 0)) / 1000).isoformat()
-                    html = get_email_body(message.get('payload', {}))
+                    message = (
+                        service.users()
+                        .messages()
+                        .get(userId="me", id=msg_info["id"], format="full")
+                        .execute()
+                    )
+                    email_date = datetime.fromtimestamp(
+                        int(message.get("internalDate", 0)) / 1000
+                    ).isoformat()
+                    html = get_email_body(message.get("payload", {}))
 
                     if not html:
                         continue
 
                     # Check if follow-up email (skip these for job extraction)
-                    subject = ''
-                    for header in message.get('payload', {}).get('headers', []):
-                        if header['name'].lower() == 'subject':
-                            subject = header['value'].lower()
+                    subject = ""
+                    for header in message.get("payload", {}).get("headers", []):
+                        if header["name"].lower() == "subject":
+                            subject = header["value"].lower()
                             break
 
-                    is_followup = any(keyword in subject for keyword in [
-                        'interview', 'next steps', 'unfortunately', 'offer',
-                        'congratulations', 'declined', 'application update'
-                    ])
+                    is_followup = any(
+                        keyword in subject
+                        for keyword in [
+                            "interview",
+                            "next steps",
+                            "unfortunately",
+                            "offer",
+                            "congratulations",
+                            "declined",
+                            "application update",
+                        ]
+                    )
 
                     if is_followup:
                         logger.debug(f"Follow-up detected (skipped): {subject[:60]}...")
@@ -199,8 +221,8 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
 
                     # Deduplicate
                     for job in jobs:
-                        if job['job_id'] not in seen_job_ids:
-                            seen_job_ids.add(job['job_id'])
+                        if job["job_id"] not in seen_job_ids:
+                            seen_job_ids.add(job["job_id"])
                             all_jobs.append(job)
                             source_jobs += 1
 
@@ -220,12 +242,14 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "INSERT INTO scan_history (last_scan_date, emails_found, created_at) VALUES (?, ?, ?)",
-        (current_scan_time, total_emails, current_scan_time)
+        (current_scan_time, total_emails, current_scan_time),
     )
     conn.commit()
     conn.close()
 
-    logger.info(f"Scan complete: {total_emails} emails checked, {len(all_jobs)} unique jobs extracted")
+    logger.info(
+        f"Scan complete: {total_emails} emails checked, {len(all_jobs)} unique jobs extracted"
+    )
     return all_jobs
 
 
@@ -238,61 +262,109 @@ def classify_followup_email(subject: str, snippet: str) -> str:
     """
     text = (subject + " " + snippet).lower()
 
-    if any(word in text for word in ['interview', 'phone screen', 'video call', 'meet the team',
-                                      'schedule a call', 'next steps', 'speak with', 'chat with']):
-        return 'interview'
+    if any(
+        word in text
+        for word in [
+            "interview",
+            "phone screen",
+            "video call",
+            "meet the team",
+            "schedule a call",
+            "next steps",
+            "speak with",
+            "chat with",
+        ]
+    ):
+        return "interview"
 
-    if any(word in text for word in ['offer', 'congratulations', 'pleased to extend',
-                                     'compensation package', 'welcome to the team']):
-        return 'offer'
+    if any(
+        word in text
+        for word in [
+            "offer",
+            "congratulations",
+            "pleased to extend",
+            "compensation package",
+            "welcome to the team",
+        ]
+    ):
+        return "offer"
 
-    if any(word in text for word in ['assessment', 'coding challenge', 'take-home',
-                                     'technical exercise', 'complete the', 'test project']):
-        return 'assessment'
+    if any(
+        word in text
+        for word in [
+            "assessment",
+            "coding challenge",
+            "take-home",
+            "technical exercise",
+            "complete the",
+            "test project",
+        ]
+    ):
+        return "assessment"
 
-    if any(word in text for word in ['unfortunately', 'not moving forward', 'other candidates',
-                                     'decided to pursue', 'not selected', 'will not be moving',
-                                     'unable to move forward', 'chosen to move forward with']):
-        return 'rejection'
+    if any(
+        word in text
+        for word in [
+            "unfortunately",
+            "not moving forward",
+            "other candidates",
+            "decided to pursue",
+            "not selected",
+            "will not be moving",
+            "unable to move forward",
+            "chosen to move forward with",
+        ]
+    ):
+        return "rejection"
 
-    if any(word in text for word in ['received your application', 'thank you for applying',
-                                     'application has been', 'reviewing your', 'under review']):
-        return 'received'
+    if any(
+        word in text
+        for word in [
+            "received your application",
+            "thank you for applying",
+            "application has been",
+            "reviewing your",
+            "under review",
+        ]
+    ):
+        return "received"
 
-    return 'update'
+    return "update"
 
 
 def extract_company_from_email(from_email: str, subject: str) -> str:
     """Extract company name from email sender or subject."""
-    if '@' in from_email:
-        domain = from_email.split('@')[1].lower()
-        company = domain.replace('.com', '').replace('.io', '').replace('.co', '')
-        company = company.replace('greenhouse', '').replace('lever', '').replace('workday', '')
+    if "@" in from_email:
+        domain = from_email.split("@")[1].lower()
+        company = domain.replace(".com", "").replace(".io", "").replace(".co", "")
+        company = company.replace("greenhouse", "").replace("lever", "").replace("workday", "")
 
-        if company not in ['gmail', 'outlook', 'yahoo', 'hotmail', 'mail', 'email']:
+        if company not in ["gmail", "outlook", "yahoo", "hotmail", "mail", "email"]:
             return company.title()
 
     patterns = [
-        r'at\s+([A-Z][A-Za-z0-9\s&.,-]+)',
-        r'with\s+([A-Z][A-Za-z0-9\s&.,-]+)',
-        r'from\s+([A-Z][A-Za-z0-9\s&.,-]+)',
+        r"at\s+([A-Z][A-Za-z0-9\s&.,-]+)",
+        r"with\s+([A-Z][A-Za-z0-9\s&.,-]+)",
+        r"from\s+([A-Z][A-Za-z0-9\s&.,-]+)",
     ]
 
     for pattern in patterns:
         match = re.search(pattern, subject)
         if match:
             company = match.group(1).strip()
-            company = re.sub(r'\s+(team|recruiting|talent|careers)$', '', company, flags=re.IGNORECASE)
+            company = re.sub(
+                r"\s+(team|recruiting|talent|careers)$", "", company, flags=re.IGNORECASE
+            )
             return company[:50]
 
-    return 'Unknown'
+    return "Unknown"
 
 
 def fuzzy_match_company(email_company: str, conn) -> Optional[str]:
     """Find matching job in database by fuzzy company name matching."""
     result = conn.execute(
         "SELECT job_id FROM jobs WHERE LOWER(company) = ? AND status IN ('applied', 'interviewing')",
-        (email_company.lower(),)
+        (email_company.lower(),),
     ).fetchone()
 
     if result:
@@ -310,14 +382,15 @@ def fuzzy_match_company(email_company: str, conn) -> Optional[str]:
             return job_id
 
         company_map = {
-            'meta': 'facebook',
-            'google': 'alphabet',
-            'aws': 'amazon',
+            "meta": "facebook",
+            "google": "alphabet",
+            "aws": "amazon",
         }
 
         for key, value in company_map.items():
-            if (key in job_company and value in email_comp_lower) or \
-               (value in job_company and key in email_comp_lower):
+            if (key in job_company and value in email_comp_lower) or (
+                value in job_company and key in email_comp_lower
+            ):
                 return job_id
 
     return None
@@ -334,7 +407,7 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
         List of follow-up email dictionaries
     """
     service = get_gmail_service()
-    after_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
+    after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
 
     queries = [
         f'(subject:interview OR subject:"phone screen" OR subject:"next steps" OR subject:"schedule") after:{after_date}',
@@ -347,39 +420,51 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
     followups = []
     seen_message_ids = set()
 
-    for folder in ['INBOX', '[Gmail]/Spam']:
+    for folder in ["INBOX", "[Gmail]/Spam"]:
         for query in queries:
             try:
-                if folder == '[Gmail]/Spam':
-                    search_query = f'in:spam {query}'
+                if folder == "[Gmail]/Spam":
+                    search_query = f"in:spam {query}"
                 else:
                     search_query = query
 
-                results = service.users().messages().list(userId='me', q=search_query, maxResults=50).execute()
-                messages = results.get('messages', [])
+                results = (
+                    service.users()
+                    .messages()
+                    .list(userId="me", q=search_query, maxResults=50)
+                    .execute()
+                )
+                messages = results.get("messages", [])
 
                 for msg_info in messages:
-                    msg_id = msg_info['id']
+                    msg_id = msg_info["id"]
 
                     if msg_id in seen_message_ids:
                         continue
                     seen_message_ids.add(msg_id)
 
                     try:
-                        message = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+                        message = (
+                            service.users()
+                            .messages()
+                            .get(userId="me", id=msg_id, format="full")
+                            .execute()
+                        )
 
-                        headers = message.get('payload', {}).get('headers', [])
-                        subject = ''
-                        from_email = ''
+                        headers = message.get("payload", {}).get("headers", [])
+                        subject = ""
+                        from_email = ""
 
                         for header in headers:
-                            if header['name'].lower() == 'subject':
-                                subject = header['value']
-                            elif header['name'].lower() == 'from':
-                                from_email = header['value']
+                            if header["name"].lower() == "subject":
+                                subject = header["value"]
+                            elif header["name"].lower() == "from":
+                                from_email = header["value"]
 
-                        snippet = message.get('snippet', '')
-                        email_date = datetime.fromtimestamp(int(message.get('internalDate', 0)) / 1000).isoformat()
+                        snippet = message.get("snippet", "")
+                        email_date = datetime.fromtimestamp(
+                            int(message.get("internalDate", 0)) / 1000
+                        ).isoformat()
 
                         email_type = classify_followup_email(subject, snippet)
                         company = extract_company_from_email(from_email, subject)
@@ -388,17 +473,21 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
                         job_id = fuzzy_match_company(company, conn)
                         conn.close()
 
-                        followups.append({
-                            'company': company,
-                            'subject': subject[:200],
-                            'type': email_type,
-                            'snippet': snippet[:500],
-                            'email_date': email_date,
-                            'job_id': job_id,
-                            'in_spam': folder == '[Gmail]/Spam'
-                        })
+                        followups.append(
+                            {
+                                "company": company,
+                                "subject": subject[:200],
+                                "type": email_type,
+                                "snippet": snippet[:500],
+                                "email_date": email_date,
+                                "job_id": job_id,
+                                "in_spam": folder == "[Gmail]/Spam",
+                            }
+                        )
 
-                        logger.info(f"{email_type.upper()}: {company} - {subject[:50]}... (spam: {folder == '[Gmail]/Spam'})")
+                        logger.info(
+                            f"{email_type.upper()}: {company} - {subject[:50]}... (spam: {folder == '[Gmail]/Spam'})"
+                        )
 
                     except Exception as e:
                         logger.error(f"Error parsing follow-up email {msg_id}: {e}")

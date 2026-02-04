@@ -82,13 +82,13 @@ def get_score_color(score: int) -> str:
         Tailwind CSS color class
     """
     if score >= 80:
-        return 'bg-green-500'
+        return "bg-green-500"
     elif score >= 60:
-        return 'bg-blue-500'
+        return "bg-blue-500"
     elif score >= 40:
-        return 'bg-yellow-500'
+        return "bg-yellow-500"
     else:
-        return 'bg-gray-300'
+        return "bg-gray-300"
 
 
 def get_score_tier(score: int) -> str:
@@ -102,13 +102,13 @@ def get_score_tier(score: int) -> str:
         Tier label string
     """
     if score >= 80:
-        return 'Excellent'
+        return "Excellent"
     elif score >= 60:
-        return 'Good'
+        return "Good"
     elif score >= 40:
-        return 'Fair'
+        return "Fair"
     else:
-        return 'Low'
+        return "Low"
 
 
 def calculate_job_stats(jobs: list) -> Dict:
@@ -122,28 +122,22 @@ def calculate_job_stats(jobs: list) -> Dict:
         Dictionary with stats: total, new, interested, applied, avg_score
     """
     if not jobs:
-        return {
-            'total': 0,
-            'new': 0,
-            'interested': 0,
-            'applied': 0,
-            'avg_score': 0
-        }
+        return {"total": 0, "new": 0, "interested": 0, "applied": 0, "avg_score": 0}
 
     total = len(jobs)
-    new_count = sum(1 for j in jobs if j.get('status') == 'new')
-    interested_count = sum(1 for j in jobs if j.get('status') == 'interested')
-    applied_count = sum(1 for j in jobs if j.get('status') == 'applied')
+    new_count = sum(1 for j in jobs if j.get("status") == "new")
+    interested_count = sum(1 for j in jobs if j.get("status") == "interested")
+    applied_count = sum(1 for j in jobs if j.get("status") == "applied")
 
-    scores = [j.get('baseline_score', 0) or 0 for j in jobs]
+    scores = [j.get("baseline_score", 0) or 0 for j in jobs]
     avg_score = sum(scores) / len(scores) if scores else 0
 
     return {
-        'total': total,
-        'new': new_count,
-        'interested': interested_count,
-        'applied': applied_count,
-        'avg_score': round(avg_score, 1)
+        "total": total,
+        "new": new_count,
+        "interested": interested_count,
+        "applied": applied_count,
+        "avg_score": round(avg_score, 1),
     }
 
 
@@ -160,19 +154,18 @@ def sort_jobs_by_weighted_score(jobs: list) -> list:
         Sorted list with weighted_score added to each job
     """
     for job in jobs:
-        job['weighted_score'] = calculate_weighted_score(
-            job.get('baseline_score', 0),
-            job.get('email_date', '')
+        job["weighted_score"] = calculate_weighted_score(
+            job.get("baseline_score", 0), job.get("email_date", "")
         )
 
-    return sorted(jobs, key=lambda x: x['weighted_score'], reverse=True)
+    return sorted(jobs, key=lambda x: x["weighted_score"], reverse=True)
 
 
 __all__ = [
-    'calculate_weighted_score',
-    'calculate_recency_score',
-    'get_score_color',
-    'get_score_tier',
-    'calculate_job_stats',
-    'sort_jobs_by_weighted_score',
+    "calculate_weighted_score",
+    "calculate_recency_score",
+    "get_score_color",
+    "get_score_tier",
+    "calculate_job_stats",
+    "sort_jobs_by_weighted_score",
 ]

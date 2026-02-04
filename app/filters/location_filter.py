@@ -16,41 +16,91 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LocationFilterResult:
     """Result of location filtering."""
+
     status: str  # 'match', 'mismatch', 'unknown'
     matched_location: Optional[str] = None  # Which config location it matched
     match_type: Optional[str] = None  # 'primary', 'secondary', 'excluded'
-    confidence: str = 'high'  # 'high', 'medium', 'low'
+    confidence: str = "high"  # 'high', 'medium', 'low'
     score_bonus: int = 0  # Score bonus from matched location
 
 
 # Common remote work indicators
 REMOTE_KEYWORDS = [
-    'remote', 'work from home', 'wfh', 'anywhere',
-    'fully remote', '100% remote', 'distributed',
-    'telecommute', 'virtual', 'remote-first',
+    "remote",
+    "work from home",
+    "wfh",
+    "anywhere",
+    "fully remote",
+    "100% remote",
+    "distributed",
+    "telecommute",
+    "virtual",
+    "remote-first",
 ]
 
 # Hybrid indicators
 HYBRID_KEYWORDS = [
-    'hybrid', 'flex', 'flexible location', 'partial remote',
-    '2 days in office', '3 days in office',
+    "hybrid",
+    "flex",
+    "flexible location",
+    "partial remote",
+    "2 days in office",
+    "3 days in office",
 ]
 
 # Common US state abbreviations
 US_STATES = {
-    'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
-    'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
-    'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
-    'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
-    'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
-    'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
-    'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
-    'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
-    'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
-    'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
-    'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
-    'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
-    'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'District of Columbia',
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+    "DC": "District of Columbia",
 }
 
 
@@ -65,13 +115,13 @@ def normalize_location(location: str) -> str:
         Normalized lowercase location string
     """
     if not location:
-        return ''
+        return ""
 
     # Normalize whitespace and case
-    location = ' '.join(location.lower().split())
+    location = " ".join(location.lower().split())
 
     # Remove common punctuation variations
-    location = location.replace(' - ', ' ').replace('-', ' ')
+    location = location.replace(" - ", " ").replace("-", " ")
 
     return location
 
@@ -126,62 +176,62 @@ def parse_location_parts(location: str) -> Dict[str, Optional[str]]:
     """
     normalized = normalize_location(location)
     result = {
-        'city': None,
-        'state': None,
-        'state_abbrev': None,
-        'country': None,
-        'work_type': None,  # 'remote', 'hybrid', 'onsite'
+        "city": None,
+        "state": None,
+        "state_abbrev": None,
+        "country": None,
+        "work_type": None,  # 'remote', 'hybrid', 'onsite'
     }
 
     # Detect work type
     if is_remote_location(normalized):
-        result['work_type'] = 'remote'
+        result["work_type"] = "remote"
     elif is_hybrid_location(normalized):
-        result['work_type'] = 'hybrid'
+        result["work_type"] = "hybrid"
     else:
-        result['work_type'] = 'onsite'
+        result["work_type"] = "onsite"
 
     # Try to extract city and state
     # Common patterns: "City, ST", "City, State", "City, ST (Remote)"
 
     # Remove parenthetical notes like "(Remote)" or "(Hybrid)"
-    clean_loc = re.sub(r'\([^)]*\)', '', location).strip()
+    clean_loc = re.sub(r"\([^)]*\)", "", location).strip()
 
     # Try "City, ST" pattern
-    match = re.match(r'^([^,]+),\s*([A-Z]{2})$', clean_loc, re.IGNORECASE)
+    match = re.match(r"^([^,]+),\s*([A-Z]{2})$", clean_loc, re.IGNORECASE)
     if match:
-        result['city'] = match.group(1).strip()
+        result["city"] = match.group(1).strip()
         abbrev = match.group(2).upper()
-        result['state_abbrev'] = abbrev
-        result['state'] = US_STATES.get(abbrev, abbrev)
+        result["state_abbrev"] = abbrev
+        result["state"] = US_STATES.get(abbrev, abbrev)
         return result
 
     # Try "City, Full State Name" pattern
-    match = re.match(r'^([^,]+),\s*([A-Za-z\s]+)$', clean_loc)
+    match = re.match(r"^([^,]+),\s*([A-Za-z\s]+)$", clean_loc)
     if match:
         city = match.group(1).strip()
         state_part = match.group(2).strip()
 
-        result['city'] = city
+        result["city"] = city
 
         # Check if it's a state name
         for abbrev, full_name in US_STATES.items():
             if state_part.lower() == full_name.lower():
-                result['state'] = full_name
-                result['state_abbrev'] = abbrev
+                result["state"] = full_name
+                result["state_abbrev"] = abbrev
                 break
             if state_part.upper() == abbrev:
-                result['state'] = full_name
-                result['state_abbrev'] = abbrev
+                result["state"] = full_name
+                result["state_abbrev"] = abbrev
                 break
 
-        if result['state'] is None:
+        if result["state"] is None:
             # Might be a country
-            result['country'] = state_part
+            result["country"] = state_part
 
     # Just a city name
     elif clean_loc and not any(kw in clean_loc.lower() for kw in REMOTE_KEYWORDS):
-        result['city'] = clean_loc
+        result["city"] = clean_loc
 
     return result
 
@@ -239,7 +289,7 @@ def filter_location(
     job_location: str,
     primary_locations: List[Dict[str, Any]],
     secondary_locations: List[Dict[str, Any]] = None,
-    excluded_locations: List[str] = None
+    excluded_locations: List[str] = None,
 ) -> LocationFilterResult:
     """
     Filter a job based on location preferences.
@@ -254,125 +304,117 @@ def filter_location(
         LocationFilterResult with status, matched location, and score bonus
     """
     if not job_location:
-        return LocationFilterResult(
-            status='unknown',
-            confidence='low'
-        )
+        return LocationFilterResult(status="unknown", confidence="low")
 
     secondary_locations = secondary_locations or []
     excluded_locations = excluded_locations or []
 
     # Parse job location
     job_parts = parse_location_parts(job_location)
-    is_remote = job_parts['work_type'] == 'remote'
-    is_hybrid = job_parts['work_type'] == 'hybrid'
+    is_remote = job_parts["work_type"] == "remote"
+    is_hybrid = job_parts["work_type"] == "hybrid"
 
     # Check excluded locations first
     normalized_job_loc = normalize_location(job_location)
     for excluded in excluded_locations:
         if excluded.lower() in normalized_job_loc:
             return LocationFilterResult(
-                status='mismatch',
+                status="mismatch",
                 matched_location=excluded,
-                match_type='excluded',
-                confidence='high'
+                match_type="excluded",
+                confidence="high",
             )
 
     # Check primary locations
     for loc in primary_locations:
-        loc_type = loc.get('type', '')
-        loc_name = loc.get('name', '')
-        score_bonus = loc.get('score_bonus', 100)
-        includes = loc.get('includes', [])
+        loc_type = loc.get("type", "")
+        loc_name = loc.get("name", "")
+        score_bonus = loc.get("score_bonus", 100)
+        includes = loc.get("includes", [])
 
         # Remote location match
-        if loc_type == 'remote' and is_remote:
+        if loc_type == "remote" and is_remote:
             return LocationFilterResult(
-                status='match',
+                status="match",
                 matched_location=loc_name,
-                match_type='primary',
-                confidence='high',
-                score_bonus=score_bonus
+                match_type="primary",
+                confidence="high",
+                score_bonus=score_bonus,
             )
 
         # City match
-        if loc_type == 'city':
-            if job_parts['city'] and _match_city(job_parts['city'], loc_name, includes):
+        if loc_type == "city":
+            if job_parts["city"] and _match_city(job_parts["city"], loc_name, includes):
                 return LocationFilterResult(
-                    status='match',
+                    status="match",
                     matched_location=loc_name,
-                    match_type='primary',
-                    confidence='high',
-                    score_bonus=score_bonus
+                    match_type="primary",
+                    confidence="high",
+                    score_bonus=score_bonus,
                 )
 
     # Check secondary locations
     for loc in secondary_locations:
-        loc_type = loc.get('type', '')
-        loc_name = loc.get('name', '')
-        score_bonus = loc.get('score_bonus', 80)
-        keywords = loc.get('keywords', [])
+        loc_type = loc.get("type", "")
+        loc_name = loc.get("name", "")
+        score_bonus = loc.get("score_bonus", 80)
+        keywords = loc.get("keywords", [])
 
         # State-specific remote
-        if loc_type == 'state_remote':
-            if is_remote and _match_state(job_parts.get('state_abbrev') or job_parts.get('state', ''), keywords):
+        if loc_type == "state_remote":
+            if is_remote and _match_state(
+                job_parts.get("state_abbrev") or job_parts.get("state", ""), keywords
+            ):
                 return LocationFilterResult(
-                    status='match',
+                    status="match",
                     matched_location=loc_name,
-                    match_type='secondary',
-                    confidence='high',
-                    score_bonus=score_bonus
+                    match_type="secondary",
+                    confidence="high",
+                    score_bonus=score_bonus,
                 )
 
             # Also check if location string contains the keywords
             for keyword in keywords:
                 if keyword.lower() in normalized_job_loc:
                     return LocationFilterResult(
-                        status='match',
+                        status="match",
                         matched_location=loc_name,
-                        match_type='secondary',
-                        confidence='medium',
-                        score_bonus=score_bonus
+                        match_type="secondary",
+                        confidence="medium",
+                        score_bonus=score_bonus,
                     )
 
         # Hybrid match
-        if loc_type == 'hybrid':
+        if loc_type == "hybrid":
             if is_hybrid:
                 # Check if keywords match
                 for keyword in keywords:
                     if keyword.lower() in normalized_job_loc:
                         return LocationFilterResult(
-                            status='match',
+                            status="match",
                             matched_location=loc_name,
-                            match_type='secondary',
-                            confidence='high',
-                            score_bonus=score_bonus
+                            match_type="secondary",
+                            confidence="high",
+                            score_bonus=score_bonus,
                         )
 
                 # Hybrid detected but no keyword match - still a potential match
                 return LocationFilterResult(
-                    status='match',
+                    status="match",
                     matched_location=loc_name,
-                    match_type='secondary',
-                    confidence='medium',
-                    score_bonus=score_bonus
+                    match_type="secondary",
+                    confidence="medium",
+                    score_bonus=score_bonus,
                 )
 
     # Check if it's a fully remote job with no specific restrictions
     # This might still be acceptable even if not explicitly in preferences
     if is_remote:
-        return LocationFilterResult(
-            status='unknown',
-            confidence='medium',
-            match_type=None
-        )
+        return LocationFilterResult(status="unknown", confidence="medium", match_type=None)
 
     # No match found - could be a mismatch or we just can't tell
     # Return unknown to let AI decide
-    return LocationFilterResult(
-        status='unknown',
-        confidence='low'
-    )
+    return LocationFilterResult(status="unknown", confidence="low")
 
 
 def filter_location_from_config(job_location: str, config: Any) -> LocationFilterResult:
@@ -390,5 +432,5 @@ def filter_location_from_config(job_location: str, config: Any) -> LocationFilte
         job_location=job_location,
         primary_locations=config.primary_locations,
         secondary_locations=config.secondary_locations,
-        excluded_locations=config.excluded_locations
+        excluded_locations=config.excluded_locations,
     )

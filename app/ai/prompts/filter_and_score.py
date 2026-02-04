@@ -9,9 +9,7 @@ from typing import Any, Dict, List
 
 
 def build_filter_and_score_prompt(
-    job_data: Dict[str, Any],
-    resume_text: str,
-    preferences: Dict[str, Any]
+    job_data: Dict[str, Any], resume_text: str, preferences: Dict[str, Any]
 ) -> str:
     """
     Build the prompt for job filtering and baseline scoring.
@@ -23,9 +21,9 @@ def build_filter_and_score_prompt(
     Returns:
         str: Formatted prompt string
     """
-    location_filter = preferences.get('location_filter', '')
-    experience_level = preferences.get('experience_level', {})
-    exclude_keywords = preferences.get('exclude_keywords', [])
+    location_filter = preferences.get("location_filter", "")
+    experience_level = preferences.get("experience_level", {})
+    exclude_keywords = preferences.get("exclude_keywords", [])
 
     exclude_str = ", ".join(exclude_keywords) if exclude_keywords else "None"
 

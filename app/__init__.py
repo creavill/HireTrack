@@ -28,6 +28,7 @@ def create_app(config_path=None):
     """
     # Load environment variables
     from dotenv import load_dotenv
+
     load_dotenv()
 
     # Load configuration
@@ -50,17 +51,13 @@ def create_app(config_path=None):
         )
 
     # Create Flask app
-    app = Flask(
-        __name__,
-        static_folder='../dist/assets',
-        static_url_path='/assets'
-    )
+    app = Flask(__name__, static_folder="../dist/assets", static_url_path="/assets")
 
     # Enable CORS
     CORS(app)
 
     # Store config in app
-    app.config['HAMMY_CONFIG'] = config
+    app.config["HAMMY_CONFIG"] = config
 
     # Initialize database
     init_db()
@@ -75,4 +72,5 @@ def create_app(config_path=None):
 def register_blueprints(app):
     """Register all Flask blueprints."""
     from app.routes import register_all_blueprints
+
     register_all_blueprints(app)

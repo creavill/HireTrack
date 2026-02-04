@@ -35,6 +35,7 @@ def register_all_blueprints(app):
     """
     # Register main blueprint for frontend
     from .main import main_bp
+
     app.register_blueprint(main_bp)
     logger.info("Registered main blueprint (frontend routes)")
 
@@ -77,6 +78,6 @@ def _register_api_routes_only(app, legacy_routes):
 from .main import main_bp
 
 __all__ = [
-    'register_all_blueprints',
-    'main_bp',
+    "register_all_blueprints",
+    "main_bp",
 ]

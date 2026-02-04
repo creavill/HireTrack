@@ -22,7 +22,7 @@ class GenericAIParser(BaseParser):
     don't have a dedicated parser.
     """
 
-    def __init__(self, source_name: str = 'generic'):
+    def __init__(self, source_name: str = "generic"):
         """
         Initialize the generic AI parser.
 
@@ -65,30 +65,32 @@ class GenericAIParser(BaseParser):
         for job_data in extracted:
             try:
                 # Clean and validate the extracted data
-                title = self.clean_text_field(job_data.get('title', ''))
-                company = self.clean_text_field(job_data.get('company', ''))
-                location = self.clean_text_field(job_data.get('location', ''))
-                url = self.clean_job_url(job_data.get('url', ''))
-                description = self.clean_text_field(job_data.get('description', ''))
+                title = self.clean_text_field(job_data.get("title", ""))
+                company = self.clean_text_field(job_data.get("company", ""))
+                location = self.clean_text_field(job_data.get("location", ""))
+                url = self.clean_job_url(job_data.get("url", ""))
+                description = self.clean_text_field(job_data.get("description", ""))
 
                 # Skip if missing essential fields
                 if not title:
                     continue
 
                 # Generate job ID
-                job_id = self.generate_job_id(url or title, title, company or 'Unknown')
+                job_id = self.generate_job_id(url or title, title, company or "Unknown")
 
-                jobs.append({
-                    'job_id': job_id,
-                    'title': title[:200],
-                    'company': company[:100] if company else 'Unknown',
-                    'location': location[:100] if location else '',
-                    'url': url,
-                    'source': self._source_name,
-                    'raw_text': description[:1000] if description else title,
-                    'created_at': email_date,
-                    'email_date': email_date
-                })
+                jobs.append(
+                    {
+                        "job_id": job_id,
+                        "title": title[:200],
+                        "company": company[:100] if company else "Unknown",
+                        "location": location[:100] if location else "",
+                        "url": url,
+                        "source": self._source_name,
+                        "raw_text": description[:1000] if description else title,
+                        "created_at": email_date,
+                        "email_date": email_date,
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Error processing extracted job: {e}")
                 continue
@@ -106,18 +108,20 @@ class GenericAIParser(BaseParser):
             Cleaned HTML string
         """
         try:
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, "html.parser")
 
             # Remove script and style elements
-            for element in soup.find_all(['script', 'style', 'head', 'meta', 'link']):
+            for element in soup.find_all(["script", "style", "head", "meta", "link"]):
                 element.decompose()
 
             # Remove hidden elements
-            for element in soup.find_all(style=lambda x: x and 'display:none' in x.replace(' ', '')):
+            for element in soup.find_all(
+                style=lambda x: x and "display:none" in x.replace(" ", "")
+            ):
                 element.decompose()
 
             # Get text with some structure preserved
-            text = soup.get_text('\n', strip=True)
+            text = soup.get_text("\n", strip=True)
 
             # Limit size
             if len(text) > 10000:
@@ -151,9 +155,9 @@ class GenericAIParser(BaseParser):
             # Parse the JSON response
             result = provider._parse_json_response(response)
 
-            jobs = result.get('jobs', [])
-            total = result.get('total_found', len(jobs))
-            notes = result.get('parsing_notes', '')
+            jobs = result.get("jobs", [])
+            total = result.get("total_found", len(jobs))
+            notes = result.get("parsing_notes", "")
 
             if notes:
                 logger.info(f"AI parsing notes for {self._source_name}: {notes}")
@@ -179,16 +183,21 @@ class GenericAIParser(BaseParser):
         """
         jobs = []
         try:
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, "html.parser")
 
             # Look for links that might be job postings
             job_patterns = [
-                'job', 'career', 'position', 'opening', 'opportunity',
-                'apply', 'hiring'
+                "job",
+                "career",
+                "position",
+                "opening",
+                "opportunity",
+                "apply",
+                "hiring",
             ]
 
-            for link in soup.find_all('a', href=True):
-                href = link.get('href', '')
+            for link in soup.find_all("a", href=True):
+                href = link.get("href", "")
                 text = link.get_text(strip=True)
 
                 # Skip very short text or non-job links
@@ -199,19 +208,20 @@ class GenericAIParser(BaseParser):
                 href_lower = href.lower()
                 text_lower = text.lower()
 
-                is_job_link = (
-                    any(p in href_lower for p in job_patterns) or
-                    any(p in text_lower for p in job_patterns)
+                is_job_link = any(p in href_lower for p in job_patterns) or any(
+                    p in text_lower for p in job_patterns
                 )
 
-                if is_job_link and href.startswith('http'):
-                    jobs.append({
-                        'title': text,
-                        'company': '',
-                        'location': '',
-                        'url': href,
-                        'description': ''
-                    })
+                if is_job_link and href.startswith("http"):
+                    jobs.append(
+                        {
+                            "title": text,
+                            "company": "",
+                            "location": "",
+                            "url": href,
+                            "description": "",
+                        }
+                    )
 
         except Exception as e:
             logger.warning(f"Basic extraction failed: {e}")

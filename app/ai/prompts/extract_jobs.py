@@ -5,11 +5,7 @@ Extract Jobs Prompt - AI prompt for extracting job listings from email content
 from typing import Dict, Any
 
 
-def build_extract_jobs_prompt(
-    email_html: str,
-    source_name: str,
-    max_chars: int = 8000
-) -> str:
+def build_extract_jobs_prompt(email_html: str, source_name: str, max_chars: int = 8000) -> str:
     """
     Build a prompt for extracting job listings from email HTML.
 

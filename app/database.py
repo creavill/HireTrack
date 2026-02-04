@@ -40,7 +40,7 @@ def init_db():
     conn.execute("PRAGMA journal_mode=WAL")
 
     # Create tables if they don't exist
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
             job_id TEXT PRIMARY KEY,
             title TEXT,
@@ -61,18 +61,18 @@ def init_db():
             is_filtered INTEGER DEFAULT 0,
             viewed INTEGER DEFAULT 0
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS scan_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             last_scan_date TEXT,
             emails_found INTEGER,
             created_at TEXT
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS watchlist (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             company TEXT NOT NULL,
@@ -80,9 +80,9 @@ def init_db():
             notes TEXT,
             created_at TEXT
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             company TEXT,
@@ -93,9 +93,9 @@ def init_db():
             job_id TEXT,
             created_at TEXT
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS external_applications (
             app_id TEXT PRIMARY KEY,
             job_id TEXT,
@@ -116,9 +116,9 @@ def init_db():
             is_linked_to_job INTEGER DEFAULT 0,
             FOREIGN KEY (job_id) REFERENCES jobs(job_id)
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS resume_variants (
             resume_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -132,9 +132,9 @@ def init_db():
             updated_at TEXT,
             is_active INTEGER DEFAULT 1
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS resume_usage_log (
             log_id TEXT PRIMARY KEY,
             resume_id TEXT,
@@ -146,9 +146,9 @@ def init_db():
             FOREIGN KEY (resume_id) REFERENCES resume_variants(resume_id),
             FOREIGN KEY (job_id) REFERENCES jobs(job_id)
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS tracked_companies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             company_name TEXT NOT NULL,
@@ -158,9 +158,9 @@ def init_db():
             created_at TEXT,
             updated_at TEXT
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS custom_email_sources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -175,9 +175,9 @@ def init_db():
             created_at TEXT,
             updated_at TEXT
         )
-    ''')
+    """)
 
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS deleted_jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_url TEXT NOT NULL UNIQUE,
@@ -186,7 +186,7 @@ def init_db():
             deleted_at TEXT,
             deleted_reason TEXT DEFAULT 'user_deleted'
         )
-    ''')
+    """)
 
     # Run migrations
     run_migrations(conn)
@@ -213,22 +213,22 @@ def run_migrations(conn):
 
     # Migration: Add job_id column to followups if it doesn't exist
     followups_columns = {row[1] for row in conn.execute("PRAGMA table_info(followups)").fetchall()}
-    if 'job_id' not in followups_columns:
+    if "job_id" not in followups_columns:
         logger.info("Migrating database: adding 'job_id' column to followups...")
         conn.execute("ALTER TABLE followups ADD COLUMN job_id TEXT")
 
     # Migration: Add viewed column if it doesn't exist
-    if 'viewed' not in jobs_columns:
+    if "viewed" not in jobs_columns:
         logger.info("Migrating database: adding 'viewed' column...")
         conn.execute("ALTER TABLE jobs ADD COLUMN viewed INTEGER DEFAULT 0")
 
     # Migration: Add job_description column if it doesn't exist
-    if 'job_description' not in jobs_columns:
+    if "job_description" not in jobs_columns:
         logger.info("Migrating database: adding 'job_description' column...")
         conn.execute("ALTER TABLE jobs ADD COLUMN job_description TEXT")
 
     # Migration: Add resume-related columns to jobs table
-    if 'recommended_resume_id' not in jobs_columns:
+    if "recommended_resume_id" not in jobs_columns:
         logger.info("Migrating database: adding resume-related columns to jobs...")
         conn.execute("ALTER TABLE jobs ADD COLUMN recommended_resume_id TEXT")
         conn.execute("ALTER TABLE jobs ADD COLUMN resume_recommendation TEXT")
@@ -236,8 +236,10 @@ def run_migrations(conn):
         conn.execute("ALTER TABLE jobs ADD COLUMN resume_match_score REAL")
 
     # Migration: Add email sources columns
-    email_sources_columns = {row[1] for row in conn.execute("PRAGMA table_info(custom_email_sources)").fetchall()}
-    if 'is_builtin' not in email_sources_columns:
+    email_sources_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(custom_email_sources)").fetchall()
+    }
+    if "is_builtin" not in email_sources_columns:
         logger.info("Migrating database: adding email sources columns...")
         conn.execute("ALTER TABLE custom_email_sources ADD COLUMN is_builtin INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE custom_email_sources ADD COLUMN category TEXT DEFAULT 'custom'")
@@ -245,7 +247,7 @@ def run_migrations(conn):
         conn.execute("ALTER TABLE custom_email_sources ADD COLUMN sample_email TEXT")
 
     # Migration: Add enrichment columns (Phase 4 - Web Search Enrichment)
-    if 'salary_estimate' not in jobs_columns:
+    if "salary_estimate" not in jobs_columns:
         logger.info("Migrating database: adding enrichment columns to jobs...")
         # Salary enrichment
         conn.execute("ALTER TABLE jobs ADD COLUMN salary_estimate TEXT")
@@ -283,7 +285,7 @@ def get_db():
 
 def close_db(e=None):
     """Close database connection if it exists in flask g."""
-    db = g.pop('db', None)
+    db = g.pop("db", None)
     if db is not None:
         db.close()
 
@@ -291,53 +293,53 @@ def close_db(e=None):
 # Built-in email sources with their parser configurations
 BUILTIN_EMAIL_SOURCES = [
     {
-        'name': 'LinkedIn Job Alerts',
-        'sender_pattern': '@linkedin.com',
-        'subject_keywords': 'job,jobs,hiring,opportunity',
-        'category': 'job_board',
-        'parser_class': 'app.parsers.linkedin.LinkedInParser',
+        "name": "LinkedIn Job Alerts",
+        "sender_pattern": "@linkedin.com",
+        "subject_keywords": "job,jobs,hiring,opportunity",
+        "category": "job_board",
+        "parser_class": "app.parsers.linkedin.LinkedInParser",
     },
     {
-        'name': 'Indeed Job Alerts',
-        'sender_pattern': '@indeed.com,@indeedemail.com',
-        'subject_keywords': 'job,jobs,hiring,new jobs',
-        'category': 'job_board',
-        'parser_class': 'app.parsers.indeed.IndeedParser',
+        "name": "Indeed Job Alerts",
+        "sender_pattern": "@indeed.com,@indeedemail.com",
+        "subject_keywords": "job,jobs,hiring,new jobs",
+        "category": "job_board",
+        "parser_class": "app.parsers.indeed.IndeedParser",
     },
     {
-        'name': 'Greenhouse ATS',
-        'sender_pattern': '@greenhouse.io',
-        'subject_keywords': 'job,opportunity,career',
-        'category': 'ats',
-        'parser_class': 'app.parsers.greenhouse.GreenhouseParser',
+        "name": "Greenhouse ATS",
+        "sender_pattern": "@greenhouse.io",
+        "subject_keywords": "job,opportunity,career",
+        "category": "ats",
+        "parser_class": "app.parsers.greenhouse.GreenhouseParser",
     },
     {
-        'name': 'Wellfound (AngelList)',
-        'sender_pattern': '@wellfound.com,@angel.co',
-        'subject_keywords': 'job,jobs,startup,opportunity',
-        'category': 'job_board',
-        'parser_class': 'app.parsers.wellfound.WellfoundParser',
+        "name": "Wellfound (AngelList)",
+        "sender_pattern": "@wellfound.com,@angel.co",
+        "subject_keywords": "job,jobs,startup,opportunity",
+        "category": "job_board",
+        "parser_class": "app.parsers.wellfound.WellfoundParser",
     },
     {
-        'name': 'Glassdoor',
-        'sender_pattern': '@glassdoor.com',
-        'subject_keywords': 'job,jobs,hiring',
-        'category': 'job_board',
-        'parser_class': None,  # Uses generic AI parser
+        "name": "Glassdoor",
+        "sender_pattern": "@glassdoor.com",
+        "subject_keywords": "job,jobs,hiring",
+        "category": "job_board",
+        "parser_class": None,  # Uses generic AI parser
     },
     {
-        'name': 'ZipRecruiter',
-        'sender_pattern': '@ziprecruiter.com',
-        'subject_keywords': 'job,jobs,hiring,match',
-        'category': 'job_board',
-        'parser_class': None,  # Uses generic AI parser
+        "name": "ZipRecruiter",
+        "sender_pattern": "@ziprecruiter.com",
+        "subject_keywords": "job,jobs,hiring,match",
+        "category": "job_board",
+        "parser_class": None,  # Uses generic AI parser
     },
     {
-        'name': 'Dice',
-        'sender_pattern': '@dice.com',
-        'subject_keywords': 'job,jobs,tech,hiring',
-        'category': 'job_board',
-        'parser_class': None,  # Uses generic AI parser
+        "name": "Dice",
+        "sender_pattern": "@dice.com",
+        "subject_keywords": "job,jobs,tech,hiring",
+        "category": "job_board",
+        "parser_class": None,  # Uses generic AI parser
     },
 ]
 
@@ -360,40 +362,46 @@ def seed_builtin_sources():
         # Check if source already exists by name
         existing = conn.execute(
             "SELECT id FROM custom_email_sources WHERE name = ? AND is_builtin = 1",
-            (source['name'],)
+            (source["name"],),
         ).fetchone()
 
         if existing:
             # Update existing source in case parser changed
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE custom_email_sources
                 SET sender_pattern = ?, subject_keywords = ?, category = ?,
                     parser_class = ?, updated_at = ?
                 WHERE id = ?
-            """, (
-                source['sender_pattern'],
-                source['subject_keywords'],
-                source['category'],
-                source['parser_class'],
-                now,
-                existing[0]
-            ))
+            """,
+                (
+                    source["sender_pattern"],
+                    source["subject_keywords"],
+                    source["category"],
+                    source["parser_class"],
+                    now,
+                    existing[0],
+                ),
+            )
         else:
             # Insert new built-in source
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO custom_email_sources
                 (name, sender_pattern, subject_keywords, category, parser_class,
                  is_builtin, enabled, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)
-            """, (
-                source['name'],
-                source['sender_pattern'],
-                source['subject_keywords'],
-                source['category'],
-                source['parser_class'],
-                now,
-                now
-            ))
+            """,
+                (
+                    source["name"],
+                    source["sender_pattern"],
+                    source["subject_keywords"],
+                    source["category"],
+                    source["parser_class"],
+                    now,
+                    now,
+                ),
+            )
 
     conn.commit()
     conn.close()

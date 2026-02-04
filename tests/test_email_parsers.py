@@ -30,10 +30,10 @@ def test_parse_linkedin_jobs_basic(sample_linkedin_email):
     assert len(jobs) > 0, "Should extract at least one job"
 
     job = jobs[0]
-    assert 'title' in job, "Should have title"
-    assert 'company' in job, "Should have company"
-    assert 'location' in job, "Should have location"
-    assert 'url' in job, "Should have URL"
+    assert "title" in job, "Should have title"
+    assert "company" in job, "Should have company"
+    assert "location" in job, "Should have location"
+    assert "url" in job, "Should have URL"
 
 
 def test_parse_linkedin_url_cleaning():
@@ -57,10 +57,10 @@ def test_parse_indeed_jobs_basic(sample_indeed_email):
     assert len(jobs) > 0, "Should extract at least one job"
 
     job = jobs[0]
-    assert 'title' in job, "Should have title"
-    assert 'company' in job, "Should have company"
-    assert 'location' in job, "Should have location"
-    assert 'url' in job, "Should have URL"
+    assert "title" in job, "Should have title"
+    assert "company" in job, "Should have company"
+    assert "location" in job, "Should have location"
+    assert "url" in job, "Should have URL"
 
 
 def test_parse_indeed_url_cleaning():
@@ -152,14 +152,14 @@ def test_generate_job_id_consistency():
         "title": "Software Engineer",
         "company": "TechCorp",
         "location": "Remote",
-        "url": "https://example.com/job/123"
+        "url": "https://example.com/job/123",
     }
 
     job2 = {
         "title": "Software Engineer",
         "company": "TechCorp",
         "location": "Remote",
-        "url": "https://example.com/job/123"
+        "url": "https://example.com/job/123",
     }
 
     # Same job should generate same ID
@@ -177,14 +177,14 @@ def test_generate_job_id_uniqueness():
         "title": "Software Engineer",
         "company": "TechCorp",
         "location": "Remote",
-        "url": "https://example.com/job/123"
+        "url": "https://example.com/job/123",
     }
 
     job2 = {
         "title": "Senior Engineer",  # Different title
         "company": "TechCorp",
         "location": "Remote",
-        "url": "https://example.com/job/456"
+        "url": "https://example.com/job/456",
     }
 
     id1 = generate_job_id(job1)

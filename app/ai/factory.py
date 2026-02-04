@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 
 # Registry of available providers
 PROVIDERS = {
-    'claude': 'app.ai.claude.ClaudeProvider',
-    'openai': 'app.ai.openai_provider.OpenAIProvider',
-    'gemini': 'app.ai.gemini_provider.GeminiProvider',
+    "claude": "app.ai.claude.ClaudeProvider",
+    "openai": "app.ai.openai_provider.OpenAIProvider",
+    "gemini": "app.ai.gemini_provider.GeminiProvider",
 }
 
 # Default provider if none specified
-DEFAULT_PROVIDER = 'claude'
+DEFAULT_PROVIDER = "claude"
 
 
 def get_provider(config: Optional[Dict[str, Any]] = None) -> AIProvider:
@@ -53,26 +53,27 @@ def get_provider(config: Optional[Dict[str, Any]] = None) -> AIProvider:
     # Get config if not provided
     if config is None:
         from app.config import get_config
-        config = get_config().to_dict() if hasattr(get_config(), 'to_dict') else {}
+
+        config = get_config().to_dict() if hasattr(get_config(), "to_dict") else {}
 
     # Get provider name from config
-    ai_config = config.get('ai', {})
-    provider_name = ai_config.get('provider', DEFAULT_PROVIDER).lower()
+    ai_config = config.get("ai", {})
+    provider_name = ai_config.get("provider", DEFAULT_PROVIDER).lower()
 
     # Validate provider
     if provider_name not in PROVIDERS:
-        available = ', '.join(PROVIDERS.keys())
+        available = ", ".join(PROVIDERS.keys())
         raise ValueError(
-            f"Unknown AI provider: '{provider_name}'. "
-            f"Available providers: {available}"
+            f"Unknown AI provider: '{provider_name}'. " f"Available providers: {available}"
         )
 
     # Import and instantiate the provider
     provider_path = PROVIDERS[provider_name]
-    module_path, class_name = provider_path.rsplit('.', 1)
+    module_path, class_name = provider_path.rsplit(".", 1)
 
     try:
         import importlib
+
         module = importlib.import_module(module_path)
         provider_class = getattr(module, class_name)
         return provider_class(config)
@@ -102,15 +103,18 @@ def get_available_providers() -> Dict[str, bool]:
 
     for provider_name in PROVIDERS.keys():
         try:
-            if provider_name == 'claude':
+            if provider_name == "claude":
                 import anthropic
-                available['claude'] = True
-            elif provider_name == 'openai':
+
+                available["claude"] = True
+            elif provider_name == "openai":
                 import openai
-                available['openai'] = True
-            elif provider_name == 'gemini':
+
+                available["openai"] = True
+            elif provider_name == "gemini":
                 import google.generativeai
-                available['gemini'] = True
+
+                available["gemini"] = True
             else:
                 available[provider_name] = False
         except ImportError:
@@ -141,44 +145,44 @@ def get_provider_info() -> Dict[str, Dict[str, Any]]:
     import os
 
     providers_info = {
-        'claude': {
-            'name': 'Claude (Anthropic)',
-            'env_var': 'ANTHROPIC_API_KEY',
-            'has_key': bool(os.environ.get('ANTHROPIC_API_KEY')),
-            'models': [
-                'claude-sonnet-4-20250514',
-                'claude-3-haiku-20240307',
-                'claude-3-5-sonnet-20241022',
+        "claude": {
+            "name": "Claude (Anthropic)",
+            "env_var": "ANTHROPIC_API_KEY",
+            "has_key": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "models": [
+                "claude-sonnet-4-20250514",
+                "claude-3-haiku-20240307",
+                "claude-3-5-sonnet-20241022",
             ],
-            'default_model': 'claude-sonnet-4-20250514',
+            "default_model": "claude-sonnet-4-20250514",
         },
-        'openai': {
-            'name': 'GPT (OpenAI)',
-            'env_var': 'OPENAI_API_KEY',
-            'has_key': bool(os.environ.get('OPENAI_API_KEY')),
-            'models': [
-                'gpt-4o',
-                'gpt-4o-mini',
-                'gpt-4-turbo',
+        "openai": {
+            "name": "GPT (OpenAI)",
+            "env_var": "OPENAI_API_KEY",
+            "has_key": bool(os.environ.get("OPENAI_API_KEY")),
+            "models": [
+                "gpt-4o",
+                "gpt-4o-mini",
+                "gpt-4-turbo",
             ],
-            'default_model': 'gpt-4o',
+            "default_model": "gpt-4o",
         },
-        'gemini': {
-            'name': 'Gemini (Google)',
-            'env_var': 'GOOGLE_API_KEY',
-            'has_key': bool(os.environ.get('GOOGLE_API_KEY')),
-            'models': [
-                'gemini-1.5-pro',
-                'gemini-1.5-flash',
-                'gemini-2.0-flash-exp',
+        "gemini": {
+            "name": "Gemini (Google)",
+            "env_var": "GOOGLE_API_KEY",
+            "has_key": bool(os.environ.get("GOOGLE_API_KEY")),
+            "models": [
+                "gemini-1.5-pro",
+                "gemini-1.5-flash",
+                "gemini-2.0-flash-exp",
             ],
-            'default_model': 'gemini-1.5-pro',
+            "default_model": "gemini-1.5-pro",
         },
     }
 
     # Add availability status
     available = get_available_providers()
     for name, info in providers_info.items():
-        info['package_installed'] = available.get(name, False)
+        info["package_installed"] = available.get(name, False)
 
     return providers_info

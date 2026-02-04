@@ -8,9 +8,7 @@ from typing import Any, Dict, List, Optional
 
 
 def build_cover_letter_prompt(
-    job: Dict[str, Any],
-    resume_text: str,
-    analysis: Optional[Dict[str, Any]] = None
+    job: Dict[str, Any], resume_text: str, analysis: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Build the prompt for cover letter generation.
@@ -24,10 +22,10 @@ def build_cover_letter_prompt(
         str: Formatted prompt string
     """
     strengths = []
-    if analysis and 'strengths' in analysis:
-        strengths = analysis['strengths']
+    if analysis and "strengths" in analysis:
+        strengths = analysis["strengths"]
 
-    strengths_str = ', '.join(strengths) if strengths else 'Not analyzed yet'
+    strengths_str = ", ".join(strengths) if strengths else "Not analyzed yet"
 
     return f"""Write a tailored cover letter (3-4 paragraphs, under 350 words).
 

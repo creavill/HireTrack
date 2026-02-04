@@ -22,11 +22,11 @@ def test_remote_location_detection():
         "title": "Software Engineer",
         "company": "TechCorp",
         "location": "Remote",
-        "description": "Full-time remote position"
+        "description": "Full-time remote position",
     }
 
     # Mock the Anthropic API response
-    with patch('local_app.anthropic.Anthropic') as mock_anthropic:
+    with patch("local_app.anthropic.Anthropic") as mock_anthropic:
         mock_client = Mock()
         mock_message = Mock()
         mock_message.content = [Mock(text="""
@@ -40,7 +40,7 @@ def test_remote_location_detection():
         mock_anthropic.return_value = mock_client
 
         # Mock config
-        with patch('local_app.CONFIG') as mock_config:
+        with patch("local_app.CONFIG") as mock_config:
             mock_config.primary_locations = [
                 {"name": "Remote", "type": "remote", "score_bonus": 100}
             ]
@@ -52,7 +52,7 @@ def test_remote_location_detection():
 
             assert result is not None, "Remote job should not be filtered"
             if result:
-                assert result.get('keep') is True
+                assert result.get("keep") is True
 
 
 def test_excluded_location_filtering():
@@ -64,18 +64,15 @@ def test_excluded_location_filtering():
 
 def test_san_diego_area_matching():
     """Test that San Diego area locations are recognized."""
-    locations = [
-        "San Diego, CA",
-        "Carlsbad, CA",
-        "La Jolla, CA",
-        "Del Mar, CA",
-        "Poway, CA"
-    ]
+    locations = ["San Diego, CA", "Carlsbad, CA", "La Jolla, CA", "Del Mar, CA", "Poway, CA"]
 
     for location in locations:
         # All these should be recognized as San Diego area
         assert "San Diego" in location or location in [
-            "Carlsbad, CA", "La Jolla, CA", "Del Mar, CA", "Poway, CA"
+            "Carlsbad, CA",
+            "La Jolla, CA",
+            "Del Mar, CA",
+            "Poway, CA",
         ]
 
 
@@ -85,31 +82,31 @@ def test_hybrid_location_detection():
         "Hybrid - San Diego",
         "Remote (Hybrid)",
         "Hybrid Remote",
-        "San Diego, CA (Hybrid)"
+        "San Diego, CA (Hybrid)",
     ]
 
     for location in hybrid_indicators:
-        assert any(keyword in location.lower() for keyword in ['hybrid', 'remote'])
+        assert any(keyword in location.lower() for keyword in ["hybrid", "remote"])
 
 
 def test_location_score_bonus_application(mock_config):
     """Test that location score bonuses are properly configured."""
     # Primary locations should have high bonuses
     primary = mock_config.primary_locations[0]
-    assert primary['score_bonus'] >= 90, "Primary locations should have high score bonus"
+    assert primary["score_bonus"] >= 90, "Primary locations should have high score bonus"
 
     # Secondary locations should have moderate bonuses
     if mock_config.secondary_locations:
         secondary = mock_config.secondary_locations[0]
-        assert 70 <= secondary['score_bonus'] < 90, "Secondary locations should have moderate bonus"
+        assert 70 <= secondary["score_bonus"] < 90, "Secondary locations should have moderate bonus"
 
 
 def test_state_remote_keywords(mock_config):
     """Test that state remote keywords are configured."""
     for location in mock_config.secondary_locations:
-        if location['type'] == 'state_remote':
-            assert 'keywords' in location, "State remote should have keywords"
-            assert len(location['keywords']) > 0, "Should have at least one keyword"
+        if location["type"] == "state_remote":
+            assert "keywords" in location, "State remote should have keywords"
+            assert len(location["keywords"]) > 0, "Should have at least one keyword"
 
 
 def test_company_name_fuzzy_matching():
@@ -157,7 +154,7 @@ def test_seniority_level_filtering():
         "Director of Engineering",
         "VP of Engineering",
         "Chief Technology Officer",
-        "Head of Engineering"
+        "Head of Engineering",
     ]
 
     # These should typically be filtered for mid-level candidates
@@ -171,7 +168,7 @@ def test_entry_level_detection():
         "Junior Software Engineer",
         "Associate Developer",
         "Entry Level Engineer",
-        "Graduate Software Engineer"
+        "Graduate Software Engineer",
     ]
 
     entry_keywords = ["junior", "associate", "entry", "graduate"]

@@ -1,125 +1,161 @@
 # Hammy the Hire Tracker
 
-**AI-Powered Job Search Assistant** that automatically scans your Gmail for job alerts, analyzes opportunities against your resume using Claude AI, and helps you track applications with intelligent insights.
+AI-powered job search assistant that scans Gmail, enriches postings, tracks applications, and catches follow-ups automatically.
+
+<!-- ![Demo](docs/demo.gif) -->
+<!-- Screenshot placeholder: Add demo GIF showing scan → enrich → track flow -->
 
 ---
 
+## What It Does
+
+Hammy automates the tedious parts of job searching. It scans your Gmail for job alerts from LinkedIn, Indeed, Greenhouse, and other sources, then uses AI to analyze each posting against your resume. The enrichment pipeline fetches full job descriptions via web search, extracting salary data and requirements. Follow-up tracking catches confirmation emails, interview invitations, and rejections—updating job statuses automatically so you never lose track of where you stand.
+
 ## Features
 
-### AI-Powered Analysis
-- **Smart Filtering**: Automatically filters jobs by location preferences and experience level
-- **Qualification Scoring**: Claude AI scores each job 1-100 based on your resume fit
-- **Resume Matching**: Recommends which resume variant to use for each application
-- **Cover Letter Generation**: Creates tailored cover letters citing actual resume experience
-- **Interview Prep**: Generates practice answers to common interview questions
-
-### Automated Job Discovery
-- **Gmail Integration**: Scans LinkedIn, Indeed, Greenhouse, and Wellfound job alerts
-- **WeWorkRemotely RSS**: Pulls remote job opportunities automatically
+### Job Discovery
+- **Gmail Integration**: Scans LinkedIn, Indeed, Greenhouse, Wellfound job alerts automatically
+- **Parser Registry**: Extensible system for adding new email sources
 - **Smart Deduplication**: Removes tracking parameters to prevent duplicate entries
-- **Follow-up Detection**: Identifies interview and offer emails
+- **Custom Email Sources**: Add any company career newsletter via the dashboard
 
-### Intelligent Tracking
-- **Web Dashboard**: Clean UI for managing your job pipeline
-- **Status Management**: Track applications through new → interested → applied → interviewing
-- **Company Watchlist**: Monitor companies not currently hiring
-- **Weighted Scoring**: Jobs sorted by 70% qualification + 30% recency
+### AI Analysis
+- **Multi-Provider Support**: Claude, OpenAI, or Gemini—switch via config
+- **Qualification Scoring**: Jobs scored 1-100 based on resume fit
+- **Cover Letter Generation**: Tailored letters citing actual resume experience
+- **Interview Prep**: Practice answers to common questions
+
+### Web Search Enrichment
+- **Full Descriptions**: Fetches complete job postings via AI web search
+- **Salary Extraction**: Parses and normalizes salary ranges
+- **Aggregator Detection**: Identifies staffing agencies vs. direct employers
+- **Logo Fetching**: Pulls company logos for visual recognition
+- **Auto Re-scoring**: Updates scores based on enriched data
+
+### Follow-Up Tracking
+- **Confirmation Scanner**: Catches "thank you for applying" emails
+- **AI Classification**: Categorizes emails as interview, rejection, offer, etc.
+- **Auto Status Updates**: Jobs move through the pipeline automatically
+- **Ghosting Detection**: Flags applications without response after X days
+- **Email Activity Timeline**: Per-job history of all related emails
+
+### Dashboard
+- **Dense Job List**: Sortable, filterable table with score visualization
+- **Two-Column Detail Page**: Full description + tracking sidebar
+- **Action Center**: Deadlines and follow-up reminders
+- **Follow-Ups Page**: Global view of all pending responses
+- **Email Sources Manager**: Add/edit custom email sources
 
 ### Chrome Extension
 - **Instant Analysis**: Analyze any job posting without leaving the page
-- **Side Panel UI**: Clean interface that works on LinkedIn, Indeed, and more
-- **One-Click Actions**: Generate cover letters and interview answers on the fly
+- **Side Panel UI**: Works on LinkedIn, Indeed, Greenhouse, and more
+- **One-Click Actions**: Generate cover letters on the fly
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-- Python 3.8+
-- Node.js 16+
+- Python 3.11+
+- Node.js 18+
 - Gmail account with job alerts enabled
-- [Anthropic API key](https://console.anthropic.com/) (Claude AI)
+- At least one AI API key (Claude, OpenAI, or Gemini)
 - Google Cloud project with Gmail API enabled
 
-### Installation
+### Install
 
-#### 1. Clone the Repository
 ```bash
 git clone https://github.com/creavill/Hammy-the-Hire-Tracker.git
 cd Hammy-the-Hire-Tracker
-```
 
-#### 2. Install Dependencies
-```bash
-# Python dependencies
-pip install -r requirements.txt
+# Option A: Setup script (recommended)
+chmod +x setup.sh && ./setup.sh
 
-# Frontend dependencies
-npm install
-npm run build
-```
-
-#### 3. Configure Your Profile
-```bash
+# Option B: Manual
+python -m venv venv && source venv/bin/activate
+pip install -r requirements-local.txt
+cd frontend && npm install && npm run build && cd ..
 cp config.example.yaml config.yaml
+# Edit config.yaml with your info
 ```
 
-Edit `config.yaml` with:
-- Your name, email, phone, location
-- LinkedIn, GitHub, portfolio URLs
-- Location preferences (cities, remote preferences)
-- Experience level and job preferences
+### Configure AI Provider
 
-#### 4. Add Your Resumes
-```bash
-cp resumes/templates/backend_developer_resume_template.txt resumes/backend_developer_resume.txt
-```
+| Provider | Env Variable | Default Model | ~Cost/100 jobs |
+|----------|-------------|---------------|----------------|
+| Claude | ANTHROPIC_API_KEY | claude-sonnet-4-20250514 | $0.50 |
+| OpenAI | OPENAI_API_KEY | gpt-4o | $0.40 |
+| Gemini | GOOGLE_API_KEY | gemini-1.5-pro | $0.05 |
 
-Edit with your actual experience, then update `config.yaml` to reference your resume files.
-
-#### 5. Set Up Gmail API
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project
-3. Enable the **Gmail API**
-4. Create OAuth 2.0 credentials (Desktop app)
-5. Download credentials file as `credentials.json` in the project root
-
-#### 6. Set Up Environment Variables
+Set your API key in `.env`:
 ```bash
 cp .env.example .env
-echo "ANTHROPIC_API_KEY=your_api_key_here" > .env
+echo "ANTHROPIC_API_KEY=your_key_here" >> .env
 ```
 
-#### 7. Run the Application
+Configure provider in `config.yaml`:
+```yaml
+ai:
+  provider: "claude"  # or "openai" or "gemini"
+  model: "claude-sonnet-4-20250514"
+```
+
+### Gmail API Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select existing)
+3. Enable the **Gmail API**
+4. Go to **Credentials** → **Create Credentials** → **OAuth client ID**
+5. Choose **Desktop app** as application type
+6. Download the JSON file and save as `credentials.json` in project root
+7. On first run, you'll be prompted to authorize in your browser
+
+### Run
+
 ```bash
+source venv/bin/activate
 python run.py
-# or
-python local_app.py
 ```
 
-Visit **http://localhost:5000** to see your dashboard!
+Dashboard at **http://localhost:5000**
 
 ---
 
-## Usage Guide
+## Architecture
 
-### Dashboard Workflow
-
-1. **Scan Gmail** - Click "Scan Gmail" to import job alerts
-2. **Review Jobs** - Jobs sorted by weighted score (qualification + recency)
-   - Green badges (80+): Strong matches
-   - Blue badges (60-79): Good matches
-   - Yellow badges (40-59): Partial matches
-3. **Analyze All** - Get detailed AI analysis with strengths, gaps, recommendations
-4. **Track Applications** - Update status and add notes
-5. **Generate Cover Letters** - AI creates tailored letters based on your resume
-
-### Chrome Extension Setup
-
-1. In Chrome, go to `chrome://extensions/`
-2. Enable "Developer mode"
-3. Click "Load unpacked" and select the `extension` folder
-4. Navigate to any job posting and click the extension icon
+```
+Gmail Inbox
+    │
+    ▼
+┌─────────────┐    ┌──────────────┐    ┌─────────────┐
+│ Email Scan  │───▶│ Parser       │───▶│ Jobs DB     │
+│ (gmail)     │    │ Registry     │    │ (SQLite)    │
+└─────────────┘    └──────────────┘    └──────┬──────┘
+                                              │
+                   ┌──────────────┐           │
+                   │ Enrichment   │◀──────────┘
+                   │ Pipeline     │
+                   │ ┌──────────┐ │
+                   │ │Location  │ │
+                   │ │Salary    │ │
+                   │ │Aggregator│ │
+                   │ │Web Search│ │
+                   │ │Logo Fetch│ │
+                   │ └──────────┘ │
+                   └──────┬───────┘
+                          │
+                   ┌──────▼───────┐    ┌─────────────┐
+                   │ AI Provider  │    │ Follow-Up   │
+                   │ (Claude /    │    │ Tracking    │
+                   │  OpenAI /    │    │ ┌─────────┐ │
+                   │  Gemini)     │    │ │Confirm  │ │
+                   └──────┬───────┘    │ │Classify │ │
+                          │            │ │Status   │ │
+                   ┌──────▼───────┐    │ │Ghosting │ │
+                   │ React        │    │ └─────────┘ │
+                   │ Dashboard    │◀───┴─────────────┘
+                   └──────────────┘
+```
 
 ---
 
@@ -127,51 +163,63 @@ Visit **http://localhost:5000** to see your dashboard!
 
 ```
 Hammy-the-Hire-Tracker/
-├── run.py                    # New entry point (recommended)
-├── local_app.py              # Legacy entry point
+├── run.py                    # Entry point
 ├── app/                      # Application package
 │   ├── __init__.py           # Flask factory (create_app)
 │   ├── config.py             # Configuration management
-│   ├── database.py           # Database operations
+│   ├── database.py           # SQLite operations
 │   ├── scoring.py            # Job scoring logic
-│   ├── ai/                   # AI analysis module
-│   │   ├── base.py           # Abstract AI provider
+│   ├── ai/                   # AI providers
+│   │   ├── base.py           # Abstract provider interface
 │   │   ├── claude.py         # Claude implementation
-│   │   └── analyzer.py       # Analysis functions
-│   ├── email/                # Email scanning module
-│   │   ├── client.py         # Gmail client
+│   │   ├── openai_provider.py
+│   │   ├── gemini_provider.py
+│   │   ├── factory.py        # Provider factory
+│   │   └── prompts/          # Shared prompt templates
+│   ├── email/                # Gmail integration
+│   │   ├── client.py         # Gmail API client
 │   │   └── scanner.py        # Email scanning
-│   ├── parsers/              # Job board parsers
-│   │   ├── base.py           # Base parser class
-│   │   ├── linkedin.py       # LinkedIn parser
-│   │   ├── indeed.py         # Indeed parser
-│   │   └── ...               # Other parsers
-│   └── routes/               # Flask blueprints
-│       └── main.py           # Frontend routes
-├── routes.py                 # API routes
-├── config.yaml               # User configuration
-├── config.example.yaml       # Configuration template
-├── .env                      # API keys
-├── requirements.txt          # Python dependencies
+│   ├── enrichment/           # Data enrichment
+│   │   ├── pipeline.py       # Orchestration
+│   │   ├── web_search.py     # AI web search
+│   │   ├── logo_fetcher.py   # Company logos
+│   │   └── aggregator_detection.py
+│   ├── filters/              # Job filtering
+│   │   ├── location_filter.py
+│   │   └── salary_filter.py
+│   └── parsers/              # Email parsers
+│       ├── base.py           # Parser base class
+│       ├── linkedin.py
+│       ├── indeed.py
+│       ├── greenhouse.py
+│       ├── wellfound.py
+│       ├── weworkremotely.py
+│       └── generic_ai.py     # AI fallback parser
+├── components/               # React components
 ├── App.jsx                   # React dashboard
-├── index.html                # Frontend entry
-├── tailwind.config.js        # Tailwind configuration
 ├── extension/                # Chrome extension
-└── resumes/                  # Resume files
+├── tests/                    # Test suite
+├── resumes/                  # Resume storage
+│   └── templates/            # Resume templates
+├── config.example.yaml       # Configuration template
+├── requirements-local.txt    # Python dependencies
+└── package.json              # Node dependencies
 ```
 
 ---
 
 ## Configuration
 
-### config.yaml
+Copy `config.example.yaml` to `config.yaml` and customize:
 
 ```yaml
+# User profile
 user:
   name: "Your Name"
   email: "you@example.com"
-  location: "Your City, State"
+  location: "San Diego, CA"
 
+# Resume variants for AI to choose from
 resumes:
   files:
     - "resumes/backend_developer_resume.txt"
@@ -180,101 +228,30 @@ resumes:
       focus: "Backend development, APIs"
       file: "resumes/backend_developer_resume.txt"
 
+# Location preferences (affects scoring)
 preferences:
   locations:
     primary:
       - name: "Remote"
         type: "remote"
         score_bonus: 100
-      - name: "San Francisco, CA"
-        type: "city"
-        score_bonus: 95
 
-  experience_level:
-    min_years: 2
-    max_years: 7
-    current_level: "mid"
-
-  filters:
-    exclude_keywords: ["Director", "VP", "Chief"]
-    min_baseline_score: 30
+# AI provider
+ai:
+  provider: "claude"
+  model: "claude-sonnet-4-20250514"
 ```
 
-### Environment Variables
-
-```bash
-ANTHROPIC_API_KEY=your_claude_api_key
-```
+See `config.example.yaml` for all available options including salary filters, experience level, exclude keywords, and custom email sources.
 
 ---
 
 ## Contributing
 
-### Adding New Job Boards
-
-1. Create parser in `app/parsers/`:
-   ```python
-   from .base import BaseParser
-
-   class NewBoardParser(BaseParser):
-       @property
-       def source_name(self) -> str:
-           return 'newboard'
-
-       def parse(self, html, email_date):
-           # Extract jobs
-           return jobs_list
-   ```
-
-2. Register in `app/parsers/__init__.py`
-
-### Customizing AI Prompts
-
-Edit prompts in `app/ai/claude.py`:
-- `filter_and_score()`: Location filtering and baseline scoring
-- `analyze_job()`: Detailed qualification analysis
-- `generate_cover_letter()`: Cover letter generation
-
----
-
-## Troubleshooting
-
-### "Missing credentials.json"
-Download OAuth credentials from [Google Cloud Console](https://console.cloud.google.com/). Enable Gmail API.
-
-### "ANTHROPIC_API_KEY not set"
-```bash
-echo "ANTHROPIC_API_KEY=your_key_here" > .env
-```
-
-### Gmail Authentication Errors
-```bash
-rm token.json
-python run.py  # Re-authenticate
-```
-
-### UI Not Updating
-Rebuild the frontend:
-```bash
-npm run build
-```
-
----
-
-## Tech Stack
-
-- **Python 3.12** / Flask - Backend
-- **SQLite** - Database
-- **Claude Sonnet 4** - AI analysis (Anthropic API)
-- **Gmail API** - Email scanning
-- **React 18** / Vite / Tailwind CSS - Frontend
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style guidelines, and how to add new parsers or AI providers.
 
 ---
 
 ## License
 
-MIT License - feel free to use this for your own job search!
-
----
-
-**Built for job seekers by job seekers**
+MIT License - see [LICENSE](LICENSE)

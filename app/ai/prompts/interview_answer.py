@@ -8,10 +8,7 @@ from typing import Any, Dict, List, Optional
 
 
 def build_interview_answer_prompt(
-    question: str,
-    job: Dict[str, Any],
-    resume_text: str,
-    analysis: Optional[Dict[str, Any]] = None
+    question: str, job: Dict[str, Any], resume_text: str, analysis: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Build the prompt for interview answer generation.
@@ -28,11 +25,11 @@ def build_interview_answer_prompt(
     strengths = []
     gaps = []
     if analysis:
-        strengths = analysis.get('strengths', [])
-        gaps = analysis.get('gaps', [])
+        strengths = analysis.get("strengths", [])
+        gaps = analysis.get("gaps", [])
 
-    strengths_str = ', '.join(strengths) if strengths else 'Not analyzed'
-    gaps_str = ', '.join(gaps) if gaps else 'None identified'
+    strengths_str = ", ".join(strengths) if strengths else "Not analyzed"
+    gaps_str = ", ".join(gaps) if gaps else "None identified"
 
     return f"""Generate a strong interview answer using ONLY actual resume content.
 

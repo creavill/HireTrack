@@ -37,11 +37,11 @@ logger = logging.getLogger(__name__)
 
 # Registry of all available parsers
 PARSER_REGISTRY: Dict[str, Type[BaseParser]] = {
-    'linkedin': LinkedInParser,
-    'indeed': IndeedParser,
-    'greenhouse': GreenhouseParser,
-    'wellfound': WellfoundParser,
-    'weworkremotely': WeWorkRemotelyParser,
+    "linkedin": LinkedInParser,
+    "indeed": IndeedParser,
+    "greenhouse": GreenhouseParser,
+    "wellfound": WellfoundParser,
+    "weworkremotely": WeWorkRemotelyParser,
 }
 
 # Singleton instances (created on first use)
@@ -81,14 +81,14 @@ def detect_source(html: str) -> Optional[str]:
 
     # Detection patterns
     patterns = [
-        ('linkedin.com/jobs/view', 'linkedin'),
-        ('linkedin.com/comm/jobs', 'linkedin'),
-        ('indeed.com/viewjob', 'indeed'),
-        ('indeed.com/rc/clk', 'indeed'),
-        ('greenhouse.io', 'greenhouse'),
-        ('boards.greenhouse.io', 'greenhouse'),
-        ('wellfound.com', 'wellfound'),
-        ('angel.co', 'wellfound'),
+        ("linkedin.com/jobs/view", "linkedin"),
+        ("linkedin.com/comm/jobs", "linkedin"),
+        ("indeed.com/viewjob", "indeed"),
+        ("indeed.com/rc/clk", "indeed"),
+        ("greenhouse.io", "greenhouse"),
+        ("boards.greenhouse.io", "greenhouse"),
+        ("wellfound.com", "wellfound"),
+        ("angel.co", "wellfound"),
     ]
 
     for pattern, source in patterns:
@@ -99,10 +99,7 @@ def detect_source(html: str) -> Optional[str]:
 
 
 def parse_email(
-    html: str,
-    email_date: str,
-    source: Optional[str] = None,
-    use_ai_fallback: bool = True
+    html: str, email_date: str, source: Optional[str] = None, use_ai_fallback: bool = True
 ) -> List[dict]:
     """
     Parse an email and extract job listings.
@@ -132,7 +129,7 @@ def parse_email(
     # No specialized parser available
     if use_ai_fallback:
         logger.info(f"Using AI parser for source: {source or 'unknown'}")
-        ai_parser = GenericAIParser(source or 'custom')
+        ai_parser = GenericAIParser(source or "custom")
         return ai_parser.parse(html, email_date)
 
     logger.warning(f"No parser found for source: {source}")
@@ -153,14 +150,15 @@ def get_parser_for_source(source_config: dict) -> BaseParser:
     Returns:
         Parser instance
     """
-    parser_class = source_config.get('parser_class')
-    source_name = source_config.get('name', 'custom')
+    parser_class = source_config.get("parser_class")
+    source_name = source_config.get("name", "custom")
 
     if parser_class:
         try:
             # Try to import the specified parser class
-            module_path, class_name = parser_class.rsplit('.', 1)
+            module_path, class_name = parser_class.rsplit(".", 1)
             import importlib
+
             module = importlib.import_module(module_path)
             parser_cls = getattr(module, class_name)
             return parser_cls()
@@ -173,6 +171,7 @@ def get_parser_for_source(source_config: dict) -> BaseParser:
 
 # Re-export commonly used utilities from base
 from .base import BaseParser
+
 
 # Convenience functions for backwards compatibility
 def clean_job_url(url: str) -> str:
@@ -193,53 +192,53 @@ def clean_text_field(text: str) -> str:
 # Legacy function names for backwards compatibility
 def parse_linkedin_jobs(html: str, email_date: str) -> List[dict]:
     """Parse LinkedIn job alert emails."""
-    parser = get_parser('linkedin')
+    parser = get_parser("linkedin")
     return parser.parse(html, email_date)
 
 
 def parse_indeed_jobs(html: str, email_date: str) -> List[dict]:
     """Parse Indeed job alert emails."""
-    parser = get_parser('indeed')
+    parser = get_parser("indeed")
     return parser.parse(html, email_date)
 
 
 def parse_greenhouse_jobs(html: str, email_date: str) -> List[dict]:
     """Parse Greenhouse ATS job alert emails."""
-    parser = get_parser('greenhouse')
+    parser = get_parser("greenhouse")
     return parser.parse(html, email_date)
 
 
 def parse_wellfound_jobs(html: str, email_date: str) -> List[dict]:
     """Parse Wellfound (AngelList) job alert emails."""
-    parser = get_parser('wellfound')
+    parser = get_parser("wellfound")
     return parser.parse(html, email_date)
 
 
 # Export all parsers and utilities
 __all__ = [
     # Registry
-    'PARSER_REGISTRY',
-    'get_parser',
-    'get_parser_for_source',
-    'detect_source',
-    'parse_email',
+    "PARSER_REGISTRY",
+    "get_parser",
+    "get_parser_for_source",
+    "detect_source",
+    "parse_email",
     # Parsers
-    'BaseParser',
-    'LinkedInParser',
-    'IndeedParser',
-    'GreenhouseParser',
-    'WellfoundParser',
-    'WeWorkRemotelyParser',
-    'GenericAIParser',
-    'create_ai_parser',
+    "BaseParser",
+    "LinkedInParser",
+    "IndeedParser",
+    "GreenhouseParser",
+    "WellfoundParser",
+    "WeWorkRemotelyParser",
+    "GenericAIParser",
+    "create_ai_parser",
     # Utilities
-    'clean_job_url',
-    'generate_job_id',
-    'clean_text_field',
-    'fetch_wwr_jobs',
+    "clean_job_url",
+    "generate_job_id",
+    "clean_text_field",
+    "fetch_wwr_jobs",
     # Legacy function names
-    'parse_linkedin_jobs',
-    'parse_indeed_jobs',
-    'parse_greenhouse_jobs',
-    'parse_wellfound_jobs',
+    "parse_linkedin_jobs",
+    "parse_indeed_jobs",
+    "parse_greenhouse_jobs",
+    "parse_wellfound_jobs",
 ]

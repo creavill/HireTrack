@@ -18,7 +18,7 @@ def temp_db():
     Yields:
         sqlite3.Connection: Database connection
     """
-    conn = sqlite3.connect(':memory:')
+    conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
 
     # Create jobs table schema
@@ -64,7 +64,7 @@ def mock_config():
     # Location preferences
     config.primary_locations = [
         {"name": "Remote", "type": "remote", "score_bonus": 100},
-        {"name": "San Diego, CA", "type": "city", "score_bonus": 95}
+        {"name": "San Diego, CA", "type": "city", "score_bonus": 95},
     ]
     config.secondary_locations = [
         {"name": "California Remote", "type": "state_remote", "score_bonus": 85}
@@ -81,11 +81,7 @@ def mock_config():
     config.auto_interest_threshold = 75
 
     # Experience
-    config.experience_level = {
-        "min_years": 1,
-        "max_years": 5,
-        "current_level": "mid"
-    }
+    config.experience_level = {"min_years": 1, "max_years": 5, "current_level": "mid"}
 
     return config
 
@@ -132,25 +128,44 @@ def sample_indeed_email():
     """
     Sample Indeed job alert email HTML for testing parser.
 
+    Indeed emails wrap entire job card content inside the link element.
+    This fixture reflects the real structure where title, company, rating,
+    location, salary, and description are all within the <a> tag.
+
     Returns:
         str: HTML content of an Indeed job alert
     """
     return """
     <html>
         <body>
-            <div class="job">
-                <h2>
-                    <a href="https://www.indeed.com/viewjob?jk=abc123&tk=xyz">
-                        Backend Engineer
-                    </a>
-                </h2>
-                <span class="company">StartupXYZ</span>
-                <div class="location">Remote</div>
-                <div class="snippet">
-                    Looking for a backend engineer proficient in Python and PostgreSQL.
-                    Strong AWS experience required.
-                </div>
-            </div>
+            <table>
+                <tr>
+                    <td>
+                        <a href="https://www.indeed.com/viewjob?jk=abc123&tk=xyz">
+                            Backend Engineer
+                            StartupXYZ	3.8	3.8/5 rating
+                            Remote
+                            $120,000 - $150,000 a year
+                            Looking for a backend engineer proficient in Python and PostgreSQL.
+                            Strong AWS experience required.
+                            Just posted
+                        </a>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <a href="https://www.indeed.com/viewjob?jk=def456&tk=xyz">
+                            DevOps Engineer (AWS / Linux)
+                            Rise Technical	3.9	3.9/5 rating
+                            Remote
+                            $100,000 - $130,000 a year
+                            Easily apply
+                            You will be responsible for working closely with the Head of DevOps.
+                            Just posted
+                        </a>
+                    </td>
+                </tr>
+            </table>
         </body>
     </html>
     """

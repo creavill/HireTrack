@@ -15,12 +15,12 @@ from .classify_email import build_classify_email_prompt
 from .extract_jobs import build_extract_jobs_prompt
 
 __all__ = [
-    'build_filter_and_score_prompt',
-    'build_analyze_job_prompt',
-    'build_cover_letter_prompt',
-    'build_interview_answer_prompt',
-    'build_search_job_prompt',
-    'build_extract_from_page_prompt',
-    'build_classify_email_prompt',
-    'build_extract_jobs_prompt',
+    "build_filter_and_score_prompt",
+    "build_analyze_job_prompt",
+    "build_cover_letter_prompt",
+    "build_interview_answer_prompt",
+    "build_search_job_prompt",
+    "build_extract_from_page_prompt",
+    "build_classify_email_prompt",
+    "build_extract_jobs_prompt",
 ]

@@ -15,64 +15,127 @@ logger = logging.getLogger(__name__)
 # Known staffing agencies and recruiters
 KNOWN_STAFFING_AGENCIES = [
     # Major staffing companies
-    'kforce', 'teksystems', 'tek systems', 'robert half', 'randstad',
-    'kelly services', 'manpower', 'manpowergroup', 'adecco', 'hays',
-    'apex group', 'apex systems', 'insight global', 'modis', 'accenture federal',
-    'collabera', 'tata consultancy', 'infosys', 'wipro', 'cognizant',
-    'capgemini', 'cybercoders', 'dice', 'hired', 'toptal',
-    'staffing', 'recruiting', 'recruiters', 'talent solutions',
-    'talent acquisition', 'contract services', 'consulting services',
-
+    "kforce",
+    "teksystems",
+    "tek systems",
+    "robert half",
+    "randstad",
+    "kelly services",
+    "manpower",
+    "manpowergroup",
+    "adecco",
+    "hays",
+    "apex group",
+    "apex systems",
+    "insight global",
+    "modis",
+    "accenture federal",
+    "collabera",
+    "tata consultancy",
+    "infosys",
+    "wipro",
+    "cognizant",
+    "capgemini",
+    "cybercoders",
+    "dice",
+    "hired",
+    "toptal",
+    "staffing",
+    "recruiting",
+    "recruiters",
+    "talent solutions",
+    "talent acquisition",
+    "contract services",
+    "consulting services",
     # IT staffing
-    'deft', 'addison group', 'vaco', 'hirewell', 'mondo', 'aquent',
-    'yoh', 'experis', 'signature consultants', 'matrix resources',
-    'beacon hill', 'mitchell martin', 'integrity staffing',
-
+    "deft",
+    "addison group",
+    "vaco",
+    "hirewell",
+    "mondo",
+    "aquent",
+    "yoh",
+    "experis",
+    "signature consultants",
+    "matrix resources",
+    "beacon hill",
+    "mitchell martin",
+    "integrity staffing",
     # Executive/specialized
-    'harvey nash', 'nigel frank', 'jefferson frank', 'mason frank',
-    'michael page', 'page group', 'spencer stuart', 'korn ferry',
+    "harvey nash",
+    "nigel frank",
+    "jefferson frank",
+    "mason frank",
+    "michael page",
+    "page group",
+    "spencer stuart",
+    "korn ferry",
 ]
 
 # Patterns in company names that suggest staffing
 STAFFING_NAME_PATTERNS = [
-    r'\bstaffing\b',
-    r'\brecruiting\b',
-    r'\brecruitment\b',
-    r'\brecruiter\b',
-    r'\btalent\b.*\bsolutions\b',
-    r'\btalent\b.*\bacquisition\b',
-    r'\bconsulting\b.*\bservices\b',
-    r'\bprofessional\b.*\bservices\b',
-    r'\bcontract\b.*\b(hire|work|services)\b',
-    r'\bplacement\b',
-    r'\bheadhunter\b',
-    r'\bhr\b.*\bsolutions\b',
+    r"\bstaffing\b",
+    r"\brecruiting\b",
+    r"\brecruitment\b",
+    r"\brecruiter\b",
+    r"\btalent\b.*\bsolutions\b",
+    r"\btalent\b.*\bacquisition\b",
+    r"\bconsulting\b.*\bservices\b",
+    r"\bprofessional\b.*\bservices\b",
+    r"\bcontract\b.*\b(hire|work|services)\b",
+    r"\bplacement\b",
+    r"\bheadhunter\b",
+    r"\bhr\b.*\bsolutions\b",
 ]
 
 # Phrases in job descriptions that suggest staffing agency
 STAFFING_DESCRIPTION_PHRASES = [
     # Client references
-    'our client', 'for our client', 'on behalf of', 'client company',
-    'a major client', 'top client', 'fortune 500 client',
-    'direct client', 'end client', 'client site',
-
+    "our client",
+    "for our client",
+    "on behalf of",
+    "client company",
+    "a major client",
+    "top client",
+    "fortune 500 client",
+    "direct client",
+    "end client",
+    "client site",
     # Contract/temp language
-    'contract to hire', 'contract-to-hire', 'c2h', 'c2p',
-    'contract to permanent', 'temp to perm', 'temp-to-perm',
-    'contract position', 'contract role', 'contract opportunity',
-    'w2 contract', 'w2 only', 'corp to corp', 'c2c',
-
+    "contract to hire",
+    "contract-to-hire",
+    "c2h",
+    "c2p",
+    "contract to permanent",
+    "temp to perm",
+    "temp-to-perm",
+    "contract position",
+    "contract role",
+    "contract opportunity",
+    "w2 contract",
+    "w2 only",
+    "corp to corp",
+    "c2c",
     # Agency process language
-    'please submit resume', 'submit your resume to',
-    'send your resume', 'forward your resume',
-    'include rate expectations', 'rate expectations',
-    'visa sponsorship not available', 'no sponsorship',
-    'must be authorized', 'authorization required',
-
+    "please submit resume",
+    "submit your resume to",
+    "send your resume",
+    "forward your resume",
+    "include rate expectations",
+    "rate expectations",
+    "visa sponsorship not available",
+    "no sponsorship",
+    "must be authorized",
+    "authorization required",
     # Third party references
-    'third party', '3rd party', 'third-party',
-    'staffing agency', 'recruiting agency', 'placement agency',
-    'recruiting firm', 'staffing firm',
+    "third party",
+    "3rd party",
+    "third-party",
+    "staffing agency",
+    "recruiting agency",
+    "placement agency",
+    "recruiting firm",
+    "staffing firm",
 ]
 
 # Confidence weights
@@ -82,11 +145,7 @@ WEIGHT_DESCRIPTION_PHRASE = 0.3  # Each description phrase match (additive)
 MAX_DESCRIPTION_WEIGHT = 0.8  # Max total from description
 
 
-def detect_aggregator(
-    company: str,
-    description: str = '',
-    title: str = ''
-) -> Dict[str, Any]:
+def detect_aggregator(company: str, description: str = "", title: str = "") -> Dict[str, Any]:
     """
     Detect if a job posting is from a staffing agency.
 
@@ -104,16 +163,11 @@ def detect_aggregator(
             "detected_agency": str | None
         }
     """
-    result = {
-        "is_aggregator": False,
-        "confidence": 0.0,
-        "reasons": [],
-        "detected_agency": None
-    }
+    result = {"is_aggregator": False, "confidence": 0.0, "reasons": [], "detected_agency": None}
 
-    company_lower = company.lower().strip() if company else ''
-    description_lower = description.lower() if description else ''
-    title_lower = title.lower() if title else ''
+    company_lower = company.lower().strip() if company else ""
+    description_lower = description.lower() if description else ""
+    title_lower = title.lower() if title else ""
 
     confidence = 0.0
     reasons = []
@@ -144,8 +198,7 @@ def detect_aggregator(
 
     if description_matches > 0:
         desc_confidence = min(
-            description_matches * WEIGHT_DESCRIPTION_PHRASE,
-            MAX_DESCRIPTION_WEIGHT
+            description_matches * WEIGHT_DESCRIPTION_PHRASE, MAX_DESCRIPTION_WEIGHT
         )
         confidence = max(confidence, desc_confidence)
         if matched_phrases:
@@ -153,8 +206,11 @@ def detect_aggregator(
 
     # Check title for contract indicators
     contract_title_patterns = [
-        r'\bcontract\b', r'\bc2h\b', r'\bcontractor\b',
-        r'\btemp\b', r'\btemporary\b'
+        r"\bcontract\b",
+        r"\bc2h\b",
+        r"\bcontractor\b",
+        r"\btemp\b",
+        r"\btemporary\b",
     ]
     for pattern in contract_title_patterns:
         if re.search(pattern, title_lower):
@@ -185,18 +241,14 @@ def flag_job_as_aggregator(job_id: str, detection_result: Dict[str, Any]) -> boo
 
     conn = get_db()
     try:
-        is_aggregator = 1 if detection_result.get('is_aggregator') else 0
+        is_aggregator = 1 if detection_result.get("is_aggregator") else 0
 
-        conn.execute(
-            "UPDATE jobs SET is_aggregator = ? WHERE job_id = ?",
-            (is_aggregator, job_id)
-        )
+        conn.execute("UPDATE jobs SET is_aggregator = ? WHERE job_id = ?", (is_aggregator, job_id))
         conn.commit()
 
         if is_aggregator:
             logger.info(
-                f"Flagged job {job_id} as aggregator: "
-                f"{detection_result.get('reasons', [])}"
+                f"Flagged job {job_id} as aggregator: " f"{detection_result.get('reasons', [])}"
             )
         return True
 
@@ -208,10 +260,7 @@ def flag_job_as_aggregator(job_id: str, detection_result: Dict[str, Any]) -> boo
 
 
 def detect_and_flag_aggregator(
-    job_id: str,
-    company: str,
-    description: str = '',
-    title: str = ''
+    job_id: str, company: str, description: str = "", title: str = ""
 ) -> Dict[str, Any]:
     """
     Detect and flag aggregator in a single operation.
@@ -245,34 +294,31 @@ def scan_jobs_for_aggregators(limit: int = 100) -> Dict[str, Any]:
     conn = get_db()
     try:
         # Get jobs that haven't been checked yet (is_aggregator is NULL or 0)
-        jobs = conn.execute("""
+        jobs = conn.execute(
+            """
             SELECT job_id, company, title, raw_text
             FROM jobs
             WHERE is_aggregator IS NULL OR is_aggregator = 0
             LIMIT ?
-        """, (limit,)).fetchall()
+        """,
+            (limit,),
+        ).fetchall()
 
         flagged = 0
         not_flagged = 0
 
         for job in jobs:
             result = detect_aggregator(
-                company=job['company'],
-                description=job['raw_text'] or '',
-                title=job['title']
+                company=job["company"], description=job["raw_text"] or "", title=job["title"]
             )
 
-            if result['is_aggregator']:
-                flag_job_as_aggregator(job['job_id'], result)
+            if result["is_aggregator"]:
+                flag_job_as_aggregator(job["job_id"], result)
                 flagged += 1
             else:
                 not_flagged += 1
 
-        return {
-            "scanned": len(jobs),
-            "flagged": flagged,
-            "not_flagged": not_flagged
-        }
+        return {"scanned": len(jobs), "flagged": flagged, "not_flagged": not_flagged}
 
     finally:
         conn.close()

@@ -24,6 +24,9 @@ jobs:
           pip install -r requirements-local.txt
           pip install pytest pytest-cov black
 
+      - name: Set up test configuration
+        run: cp config.example.yaml config.yaml
+
       - name: Check Python formatting
         run: black --check --line-length 100 app/ tests/ run.py
 

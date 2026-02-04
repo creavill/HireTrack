@@ -67,9 +67,21 @@ def mock_config():
         {"name": "San Diego, CA", "type": "city", "score_bonus": 95},
     ]
     config.secondary_locations = [
-        {"name": "California Remote", "type": "state_remote", "score_bonus": 85}
+        {
+            "name": "California Remote",
+            "type": "state_remote",
+            "score_bonus": 85,
+            "keywords": ["CA Remote", "California Remote", "Remote (CA)"],
+        }
     ]
     config.excluded_locations = []
+
+    # Method to generate location filter prompt
+    def get_location_filter_prompt():
+        locations = ["Remote", "San Diego, CA"]
+        return f"Keep ONLY if location is: {', '.join(locations)}"
+
+    config.get_location_filter_prompt = get_location_filter_prompt
 
     # Resume files
     config.resume_files = ["resumes/fullstack_developer_resume.txt"]

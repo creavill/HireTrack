@@ -24,7 +24,7 @@ from ai_analyzer import (
     calculate_weighted_score,
     generate_interview_answer,
 )
-from gmail_scanner import scan_emails, scan_followup_emails
+from gmail_scanner import scan_emails, scan_followup_emails, get_gmail_service, get_email_body
 from resume_manager import (
     load_resumes,
     load_resumes_from_db,
@@ -911,49 +911,59 @@ def register_routes(app):
     @app.route("/api/scan", methods=["POST"])
     def api_scan():
         """
-        Scan Gmail for job alerts with AI filtering.
+        Unified three-phase scan pipeline with store-then-enrich flow.
 
         Route: POST /api/scan
 
         Process:
-            1. Scans Gmail using scan_emails() function
-            2. Loads user's resume(s) from database
-            3. Runs AI filter on each job (location, seniority match)
-            4. Generates baseline score (1-100)
-            5. Stores jobs in database (marks filtered jobs with is_filtered=1)
-            6. Skips duplicates (same job_id, URL, or company+title)
+            Phase 1: Fetch job alert emails from known sources
+            Phase 2: Detect follow-up emails (confirmations, interviews, rejections)
+            Phase 3: Discover potential new job alert sources
+
+            For Phase 1 jobs:
+            1. Quick rule-based filter (location, seniority)
+            2. Store jobs with enrichment_status='pending' (no AI scoring yet)
+            3. Follow-ups from Phase 2 are stored in followups table
+            4. Return quickly — enrichment + scoring happens via /api/enrich-pending
 
         Returns:
             JSON with:
             - found: Total jobs extracted from emails
-            - new: Jobs added to database
-            - filtered: Jobs filtered out by AI
+            - stored: Jobs stored pending enrichment
+            - filtered: Jobs filtered out by rules
             - duplicates: Jobs already in database
+            - followups_found: Follow-up emails detected
+            - followups_new: New follow-ups stored
+            - followups_jobs_created: Jobs created from cold applications
+            - sources_discovered: New job alert sources discovered
 
         Raises:
             400: If no resumes found
 
         Examples:
             POST /api/scan
-            Response: {"found": 45, "new": 12, "filtered": 28, "duplicates": 5}
+            Response: {"found": 45, "stored": 12, "filtered": 28, ...}
         """
-        jobs = scan_emails()
-        resume_text = load_resumes()
+        scan_result = scan_emails()
+        jobs = scan_result["jobs"]
+        followups = scan_result["followups"]
 
+        resume_text = load_resumes()
         if not resume_text:
             return (
                 jsonify({"error": "No resumes found. Add .txt/.md files to resumes/ folder"}),
                 400,
             )
 
+        # --- Store Phase 1 jobs (filter first, then store without AI scoring) ---
         conn = get_db()
-        new_count = 0
+        stored_count = 0
         filtered_count = 0
         duplicate_count = 0
 
         try:
             for job in jobs:
-                # Check if job already exists in DB (by job_id, URL, or company+title)
+                # Check duplicates
                 existing = conn.execute(
                     """
                     SELECT 1 FROM jobs
@@ -965,26 +975,25 @@ def register_routes(app):
                 ).fetchone()
                 if existing:
                     duplicate_count += 1
-                    logger.info(f"⏭️  Skipping duplicate: {job['title'][:50]}")
                     continue
 
-                # Check if this job was previously deleted
+                # Check previously deleted
                 deleted_check = conn.execute(
                     "SELECT id FROM deleted_jobs WHERE job_url = ?", (job["url"],)
                 ).fetchone()
                 if deleted_check:
-                    logger.debug(f"⏭️  Skipping previously deleted job: {job['title'][:50]}")
                     continue
 
-                # AI filter and baseline score
+                # Quick rule-based AI filter (location + seniority)
                 keep, baseline_score, reason = ai_filter_and_score(job, resume_text)
 
                 if keep:
                     conn.execute(
                         """
                         INSERT INTO jobs (job_id, title, company, location, url, source, raw_text,
-                                         baseline_score, created_at, updated_at, email_date, is_filtered)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                                         baseline_score, created_at, updated_at, email_date,
+                                         is_filtered, enrichment_status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')
                     """,
                         (
                             job["job_id"],
@@ -1000,16 +1009,18 @@ def register_routes(app):
                             job.get("email_date", job["created_at"]),
                         ),
                     )
-                    conn.commit()  # Commit immediately
-                    new_count += 1
-                    logger.info(f"✓ Kept: {job['title'][:50]} - Score {baseline_score} - {reason}")
+                    conn.commit()
+                    stored_count += 1
+                    logger.info(
+                        f"Stored (pending enrichment): {job['title'][:50]} - Score {baseline_score}"
+                    )
                 else:
-                    # Store filtered jobs but mark them
                     conn.execute(
                         """
                         INSERT INTO jobs (job_id, title, company, location, url, source, raw_text,
-                                         baseline_score, created_at, updated_at, email_date, is_filtered, notes)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                                         baseline_score, created_at, updated_at, email_date,
+                                         is_filtered, notes, enrichment_status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'skipped')
                     """,
                         (
                             job["job_id"],
@@ -1026,24 +1037,104 @@ def register_routes(app):
                             reason,
                         ),
                     )
-                    conn.commit()  # Commit immediately
+                    conn.commit()
                     filtered_count += 1
-                    logger.info(f"✗ Filtered: {job['title'][:50]} - {reason}")
         finally:
             conn.close()
 
-        logger.info(f"\n📊 Scan Summary:")
-        logger.info(f"   - Found: {len(jobs)} jobs")
-        logger.info(f"   - New & kept: {new_count}")
-        logger.info(f"   - Filtered: {filtered_count}")
-        logger.info(f"   - Duplicates skipped: {duplicate_count}")
+        # --- Store Phase 2 follow-ups ---
+        conn = get_db()
+        followups_new = 0
+        updated_jobs = 0
+        try:
+            for followup in followups:
+                gmail_msg_id = followup.get("gmail_message_id")
+                if gmail_msg_id:
+                    existing = conn.execute(
+                        "SELECT id FROM followups WHERE gmail_message_id = ?", (gmail_msg_id,)
+                    ).fetchone()
+                else:
+                    existing = conn.execute(
+                        "SELECT id FROM followups WHERE company = ? AND subject = ? AND email_date = ?",
+                        (followup["company"], followup["subject"], followup["email_date"]),
+                    ).fetchone()
+
+                if existing:
+                    continue
+
+                conn.execute(
+                    """INSERT INTO followups (
+                        company, subject, type, snippet, email_date, job_id, created_at,
+                        gmail_message_id, sender_email, ai_summary
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        followup["company"],
+                        followup["subject"],
+                        followup["type"],
+                        followup["snippet"],
+                        followup["email_date"],
+                        followup["job_id"],
+                        datetime.now().isoformat(),
+                        followup.get("gmail_message_id"),
+                        followup.get("sender_email"),
+                        f"{followup['type'].title()} from {followup['company']}"
+                        + (f" for {followup.get('role')}" if followup.get("role") else ""),
+                    ),
+                )
+                conn.commit()
+                followups_new += 1
+
+                # Auto-update job status if matched
+                if followup["job_id"]:
+                    job = conn.execute(
+                        "SELECT status FROM jobs WHERE job_id = ?", (followup["job_id"],)
+                    ).fetchone()
+                    if job:
+                        current_status = job[0]
+                        new_status = current_status
+                        if followup["type"] == "rejection" and current_status != "rejected":
+                            new_status = "rejected"
+                        elif followup["type"] == "interview" and current_status not in [
+                            "interviewing",
+                            "offered",
+                            "accepted",
+                        ]:
+                            new_status = "interviewing"
+                        elif followup["type"] == "offer" and current_status not in [
+                            "offered",
+                            "accepted",
+                        ]:
+                            new_status = "offered"
+
+                        if new_status != current_status:
+                            conn.execute(
+                                "UPDATE jobs SET status = ?, updated_at = ? WHERE job_id = ?",
+                                (new_status, datetime.now().isoformat(), followup["job_id"]),
+                            )
+                            conn.commit()
+                            updated_jobs += 1
+        finally:
+            conn.close()
+
+        logger.info(
+            f"Scan Summary: {len(jobs)} found, {stored_count} stored, "
+            f"{filtered_count} filtered, {duplicate_count} dupes, "
+            f"{len(followups)} follow-ups, {scan_result['phase3_discoveries']} discoveries"
+        )
 
         return jsonify(
             {
                 "found": len(jobs),
-                "new": new_count,
+                "stored": stored_count,
                 "filtered": filtered_count,
                 "duplicates": duplicate_count,
+                "pending_enrichment": stored_count,
+                "followups_found": len(followups),
+                "followups_new": followups_new,
+                "followups_jobs_created": scan_result["phase2_jobs_created"],
+                "followups_updated_jobs": updated_jobs,
+                "sources_discovered": scan_result["phase3_discoveries"],
+                "cleaned_emails": scan_result["cleaned_emails"],
             }
         )
 
@@ -1505,6 +1596,265 @@ def register_routes(app):
             return jsonify({"activities": [], "error": str(e)})
         finally:
             conn.close()
+
+    # ===================================================================
+    # Enrich-Pending Endpoint
+    # ===================================================================
+
+    @app.route("/api/enrich-pending", methods=["POST"])
+    def api_enrich_pending():
+        """
+        Enrich and re-score jobs that have enrichment_status='pending'.
+
+        Route: POST /api/enrich-pending
+
+        Process:
+            1. Finds jobs with enrichment_status='pending' and is_filtered=0
+            2. For each: runs web search enrichment (salary, description, URL)
+            3. Re-scores based on enriched data
+            4. Updates enrichment_status to 'complete' or 'failed'
+
+        Query Params:
+            - max: Maximum jobs to enrich (default 10)
+            - min_score: Minimum baseline_score threshold (default 0)
+
+        Returns:
+            JSON with enrichment results
+        """
+        max_jobs = request.args.get("max", 10, type=int)
+        min_score = request.args.get("min_score", 0, type=int)
+
+        try:
+            from app.enrichment.pipeline import enrich_job
+
+            conn = get_db()
+            pending = conn.execute(
+                """
+                SELECT job_id, title, company, baseline_score
+                FROM jobs
+                WHERE enrichment_status = 'pending'
+                  AND is_filtered = 0
+                  AND baseline_score >= ?
+                ORDER BY baseline_score DESC
+                LIMIT ?
+            """,
+                (min_score, max_jobs),
+            ).fetchall()
+            conn.close()
+
+            results = []
+            successful = 0
+            failed = 0
+
+            for job in pending:
+                job_id = job["job_id"]
+                result = enrich_job(job_id)
+                results.append(
+                    {
+                        "job_id": job_id,
+                        "title": job["title"],
+                        "company": job["company"],
+                        "success": result.get("success", False),
+                        "enriched_fields": result.get("enriched_fields", []),
+                        "new_score": result.get("new_score"),
+                    }
+                )
+
+                # Update enrichment_status
+                conn = get_db()
+                status = "complete" if result.get("success") else "failed"
+                conn.execute(
+                    "UPDATE jobs SET enrichment_status = ? WHERE job_id = ?",
+                    (status, job_id),
+                )
+                conn.commit()
+                conn.close()
+
+                if result.get("success"):
+                    successful += 1
+                else:
+                    failed += 1
+
+            return jsonify(
+                {
+                    "total": len(results),
+                    "successful": successful,
+                    "failed": failed,
+                    "results": results,
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error in enrich-pending: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    # ===================================================================
+    # Discovered Sources Endpoints
+    # ===================================================================
+
+    @app.route("/api/discovered-sources", methods=["GET"])
+    def api_get_discovered_sources():
+        """
+        Get discovered email sources pending review.
+
+        Route: GET /api/discovered-sources
+
+        Query Params:
+            - status: Filter by status (default 'pending'). Use 'all' for all.
+
+        Returns:
+            JSON with sources list and count
+        """
+        import json as json_module
+
+        status_filter = request.args.get("status", "pending")
+        conn = get_db()
+        try:
+            if status_filter == "all":
+                rows = conn.execute(
+                    "SELECT * FROM discovered_email_sources ORDER BY email_count DESC"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM discovered_email_sources WHERE status = ? ORDER BY email_count DESC",
+                    (status_filter,),
+                ).fetchall()
+
+            sources = []
+            for row in rows:
+                source = dict(row)
+                # Parse sample_subjects from JSON string
+                if source.get("sample_subjects"):
+                    try:
+                        source["sample_subjects"] = json_module.loads(source["sample_subjects"])
+                    except (json_module.JSONDecodeError, TypeError):
+                        source["sample_subjects"] = []
+                else:
+                    source["sample_subjects"] = []
+                sources.append(source)
+
+            return jsonify({"sources": sources, "count": len(sources)})
+        finally:
+            conn.close()
+
+    @app.route("/api/discovered-sources/<int:source_id>/add", methods=["POST"])
+    def api_add_discovered_source(source_id):
+        """
+        Convert a discovered source into a configured email source.
+
+        Route: POST /api/discovered-sources/<id>/add
+        """
+        from app.database import detect_parser_type
+
+        conn = get_db()
+        try:
+            discovered = conn.execute(
+                "SELECT * FROM discovered_email_sources WHERE id = ?", (source_id,)
+            ).fetchone()
+
+            if not discovered:
+                return jsonify({"error": "Not found"}), 404
+
+            if discovered["status"] == "added":
+                return jsonify({"error": "Source already added"}), 400
+
+            parser_type = detect_parser_type(discovered["sender_email"])
+            name = (
+                discovered["sender_name"]
+                or discovered["sender_email"].split("@")[1].split(".")[0].title()
+            )
+            now = datetime.now().isoformat()
+
+            conn.execute(
+                """
+                INSERT INTO custom_email_sources
+                (name, sender_email, parser_class, enabled, is_builtin, created_at, updated_at)
+                VALUES (?, ?, ?, 1, 0, ?, ?)
+            """,
+                (name, discovered["sender_email"], parser_type, now, now),
+            )
+
+            conn.execute(
+                "UPDATE discovered_email_sources SET status = 'added', updated_at = ? WHERE id = ?",
+                (now, source_id),
+            )
+            conn.commit()
+
+            return jsonify({"success": True, "name": name, "parser_type": parser_type})
+        except Exception as e:
+            logger.error(f"Error adding discovered source: {e}")
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+
+    @app.route("/api/discovered-sources/<int:source_id>/dismiss", methods=["POST"])
+    def api_dismiss_discovered_source(source_id):
+        """
+        Dismiss a discovered source so it doesn't appear again.
+
+        Route: POST /api/discovered-sources/<id>/dismiss
+        """
+        conn = get_db()
+        try:
+            conn.execute(
+                "UPDATE discovered_email_sources SET status = 'dismissed', updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), source_id),
+            )
+            conn.commit()
+            return jsonify({"success": True})
+        finally:
+            conn.close()
+
+    @app.route("/api/discovered-sources/<int:source_id>/preview", methods=["GET"])
+    def api_preview_discovered_source(source_id):
+        """
+        Preview the sample email from a discovered source.
+
+        Route: GET /api/discovered-sources/<id>/preview
+        """
+        conn = get_db()
+        try:
+            discovered = conn.execute(
+                "SELECT sample_email_id FROM discovered_email_sources WHERE id = ?",
+                (source_id,),
+            ).fetchone()
+            conn.close()
+
+            if not discovered or not discovered["sample_email_id"]:
+                return jsonify({"error": "No sample email available"}), 404
+
+            service = get_gmail_service()
+            message = (
+                service.users()
+                .messages()
+                .get(userId="me", id=discovered["sample_email_id"], format="full")
+                .execute()
+            )
+
+            headers = message.get("payload", {}).get("headers", [])
+            subject = ""
+            from_addr = ""
+            date = ""
+            for h in headers:
+                if h["name"].lower() == "subject":
+                    subject = h["value"]
+                elif h["name"].lower() == "from":
+                    from_addr = h["value"]
+                elif h["name"].lower() == "date":
+                    date = h["value"]
+
+            body = get_email_body(message.get("payload", {}))
+
+            return jsonify(
+                {
+                    "subject": subject,
+                    "from": from_addr,
+                    "date": date,
+                    "body": (body or "")[:5000],
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error previewing discovered source: {e}")
+            return jsonify({"error": str(e)}), 500
 
     @app.route("/api/capture", methods=["POST"])
     def api_capture():

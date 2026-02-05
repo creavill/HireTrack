@@ -143,9 +143,114 @@ class ClaudeProvider(AIProvider):
 
     def search_job_description(self, company: str, title: str) -> Dict[str, Any]:
         """
-        Search for and enrich job description data.
+        Search for and enrich job description data using Claude's web search.
 
-        Uses web search to find job posting and AI to extract structured info.
+        Uses Claude's built-in web search tool to find job postings and extract details.
+        """
+        try:
+            # First try Claude web search
+            logger.info(f"Using Claude web search for: {title} at {company}")
+            web_search_result = self._search_with_claude_web(company, title)
+
+            if web_search_result.get("found"):
+                logger.info(f"Claude web search successful for {title}")
+                return web_search_result
+
+            # Fallback to DuckDuckGo if Claude web search fails
+            logger.info(f"Falling back to DuckDuckGo search for: {title} at {company}")
+            return self._search_with_duckduckgo(company, title)
+
+        except Exception as e:
+            logger.error(f"Search job description error: {e}")
+            return {"found": False, "enrichment_status": "error", "error": str(e)}
+
+    def _search_with_claude_web(self, company: str, title: str) -> Dict[str, Any]:
+        """
+        Use Claude's web search tool to find job description.
+
+        Args:
+            company: Company name
+            title: Job title
+
+        Returns:
+            Dictionary with job description data
+        """
+        try:
+            # Build the prompt for web search
+            search_prompt = f"""Search the web to find the job posting for "{title}" at "{company}".
+
+Look for:
+1. The official job posting on the company's careers page or job boards like LinkedIn, Indeed, Greenhouse, Lever
+2. The full job description with responsibilities and requirements
+3. Salary information if available
+4. Location details
+
+After finding the job posting, extract and return this information in JSON format:
+{{
+    "found": true/false,
+    "description": "Full job description text (responsibilities, requirements, qualifications)",
+    "salary_range": "Salary range if found (e.g., '$100,000 - $150,000')",
+    "location": "Job location",
+    "job_type": "Full-time/Part-time/Contract",
+    "requirements": ["requirement 1", "requirement 2", ...],
+    "benefits": ["benefit 1", "benefit 2", ...],
+    "source_url": "URL where you found this information"
+}}
+
+If you cannot find the job posting, return:
+{{"found": false, "error": "reason"}}"""
+
+            # Call Claude with web search tool enabled
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=2000,
+                tools=[{
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 3
+                }],
+                messages=[{"role": "user", "content": search_prompt}]
+            )
+
+            # Process the response
+            result_text = ""
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    result_text += block.text
+
+            # Parse JSON from response
+            extracted = self._parse_json_response(result_text)
+
+            if extracted.get("found"):
+                return {
+                    "found": True,
+                    "description": extracted.get("description", ""),
+                    "requirements": extracted.get("requirements", []),
+                    "salary_range": extracted.get("salary_range"),
+                    "benefits": extracted.get("benefits", []),
+                    "source_url": extracted.get("source_url"),
+                    "location": extracted.get("location"),
+                    "job_type": extracted.get("job_type"),
+                    "enrichment_status": "success",
+                }
+            else:
+                return {
+                    "found": False,
+                    "enrichment_status": "not_found",
+                    "error": extracted.get("error", "Job not found via Claude web search"),
+                }
+
+        except Exception as e:
+            logger.warning(f"Claude web search failed: {e}")
+            return {
+                "found": False,
+                "enrichment_status": "error",
+                "error": f"Claude web search error: {str(e)}",
+            }
+
+    def _search_with_duckduckgo(self, company: str, title: str) -> Dict[str, Any]:
+        """
+        Fallback to DuckDuckGo search if Claude web search fails.
         """
         try:
             from app.enrichment import search_job_posting
@@ -190,9 +295,6 @@ class ClaudeProvider(AIProvider):
                 "enrichment_status": "not_supported",
                 "error": "Web search enrichment dependencies not installed.",
             }
-        except Exception as e:
-            logger.error(f"Search job description error: {e}")
-            return {"found": False, "enrichment_status": "error", "error": str(e)}
 
     def classify_email(self, subject: str, sender: str, body: str) -> Dict[str, Any]:
         """Classify an email for job-search relevance."""

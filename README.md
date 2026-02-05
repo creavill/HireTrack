@@ -157,6 +157,88 @@ Gmail Inbox
                    └──────────────┘
 ```
 
+### Unified Processing Flow
+
+When you click **"Process Emails"**, Hammy runs a complete pipeline that scans, enriches, and scores jobs in one pass. Each job is only enriched and scored once to avoid redundant API calls.
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         PROCESS EMAILS PIPELINE                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║  │ PHASE 1: SCAN EMAILS                                                    │ ║
+║  │ ─────────────────────                                                   │ ║
+║  │ • Query Gmail for unread job alert emails                               │ ║
+║  │ • Parse each email using source-specific parsers                        │ ║
+║  │   (LinkedIn, Indeed, Greenhouse, Wellfound, custom sources)             │ ║
+║  │ • Extract: title, company, location, apply_url, snippet                 │ ║
+║  └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                    │                                         ║
+║                                    ▼                                         ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║  │ PHASE 2: FILTER & STORE NEW JOBS                                        │ ║
+║  │ ───────────────────────────────                                         │ ║
+║  │ • Deduplicate: Skip jobs already in database (by URL fingerprint)       │ ║
+║  │ • Location filter: Remote, user's city, or configured locations         │ ║
+║  │ • Seniority filter: Skip jobs above/below configured level              │ ║
+║  │ • Store new jobs with enrichment_status = 'pending'                     │ ║
+║  └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                    │                                         ║
+║                                    ▼                                         ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║  │ PHASE 3: ENRICH JOBS (Web Search) - ONCE PER JOB                        │ ║
+║  │ ───────────────────────────────────────────────                         │ ║
+║  │ • Only process jobs with enrichment_status = 'pending'                  │ ║
+║  │ • AI web search to find full job posting                                │ ║
+║  │ • Extract: full description, salary range, requirements                 │ ║
+║  │ • Fetch company logo                                                    │ ║
+║  │ • Detect staffing agencies vs direct employers                          │ ║
+║  │ • Update enrichment_status = 'enriched'                                 │ ║
+║  │ ⚠️  Jobs are enriched EXACTLY ONCE - never re-enriched                  │ ║
+║  └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                    │                                         ║
+║                                    ▼                                         ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║  │ PHASE 4: SCORE JOBS (AI Analysis) - ONCE PER JOB                        │ ║
+║  │ ──────────────────────────────────────────────                          │ ║
+║  │ • Only process jobs with enrichment_status = 'enriched'                 │ ║
+║  │ • AI analyzes job against your resume(s)                                │ ║
+║  │ • Generate qualification score (1-100)                                  │ ║
+║  │ • Identify matching skills and gaps                                     │ ║
+║  │ • Update enrichment_status = 'scored'                                   │ ║
+║  │ ⚠️  Jobs are scored EXACTLY ONCE - never re-scored                      │ ║
+║  └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                    │                                         ║
+║                                    ▼                                         ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║  │ PHASE 5: STORE FOLLOW-UPS                                               │ ║
+║  │ ────────────────────────                                                │ ║
+║  │ • Link email metadata to jobs for activity timeline                     │ ║
+║  │ • Store message IDs for viewing full emails later                       │ ║
+║  │ • Track application confirmations, interviews, rejections               │ ║
+║  └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+JOB STATE TRANSITIONS:
+──────────────────────
+
+  ┌─────────┐   enrich   ┌──────────┐   score   ┌────────┐
+  │ pending │ ─────────▶ │ enriched │ ────────▶ │ scored │
+  └─────────┘            └──────────┘           └────────┘
+       │                                              │
+       │  (New job from email scan)    (Ready for dashboard display)
+       │                                              │
+       ▼                                              ▼
+  Has basic info only:              Has complete data:
+  - title                           - full job description
+  - company                         - salary range
+  - location                        - AI qualification score
+  - apply_url                       - skill match analysis
+  - email snippet                   - company logo
+```
+
 ---
 
 ## Project Structure

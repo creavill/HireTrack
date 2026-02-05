@@ -57,7 +57,7 @@ def create_operation_log(operation_type: str) -> Path:
 def write_log(log_file: Path, message: str, data: dict = None):
     """Write a log entry to a file."""
     timestamp = datetime.now().isoformat()
-    with open(log_file, "a") as f:
+    with open(log_file, "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {message}\n")
         if data:
             f.write(f"  Data: {json.dumps(data, indent=2, default=str)}\n")
@@ -1349,11 +1349,25 @@ def register_routes(app):
                             )
                             conn.commit()
                             results["jobs_enriched"] += 1
-                            write_log(log_file, f"    ✓ Enriched: salary={enrich_result.get('salary_estimate', 'N/A')}")
+                            # Detailed enrichment logging
+                            salary = enrich_result.get('salary_estimate', 'N/A')
+                            desc = enrich_result.get('full_description', '')
+                            desc_len = len(desc) if desc else 0
+                            source = enrich_result.get('source_url', 'N/A')
+                            fields = enrich_result.get('enriched_fields', [])
+                            write_log(log_file, f"    [OK] Enriched successfully:")
+                            write_log(log_file, f"        - Salary: {salary}")
+                            write_log(log_file, f"        - Description: {desc_len} chars")
+                            write_log(log_file, f"        - Source: {source[:60]}..." if source and len(str(source)) > 60 else f"        - Source: {source}")
+                            write_log(log_file, f"        - Fields updated: {', '.join(fields) if fields else 'none'}")
                         else:
-                            write_log(log_file, f"    ✗ Failed: {enrich_result.get('error', 'Unknown error')}")
+                            error_msg = enrich_result.get('error', 'Unknown error')
+                            status = enrich_result.get('enrichment_status', 'unknown')
+                            write_log(log_file, f"    [FAIL] Enrichment failed:")
+                            write_log(log_file, f"        - Status: {status}")
+                            write_log(log_file, f"        - Error: {error_msg}")
                     except Exception as e:
-                        write_log(log_file, f"    ✗ Error: {str(e)}")
+                        write_log(log_file, f"    [ERROR] Exception during enrichment: {str(e)}")
                         results["errors"].append(f"Enrich {job_id}: {str(e)}")
 
             except ImportError:

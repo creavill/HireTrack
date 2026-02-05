@@ -240,14 +240,16 @@ def enrich_job_data(
         else:
             update_values["salary_confidence"] = "none"
 
-        # Extract full description
+        # Extract full description - store in BOTH columns for compatibility
         description = search_result.get("description")
         if description and len(description) > 100:
             update_values["full_description"] = description[:10000]  # Max 10k chars
+            update_values["job_description"] = description[:10000]   # Also store in job_description
             result["full_description"] = (
                 description[:1000] + "..." if len(description) > 1000 else description
             )
             enriched_fields.append("full_description")
+            enriched_fields.append("job_description")
 
         # Extract source URL
         source_url = search_result.get("source_url")

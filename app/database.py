@@ -519,6 +519,20 @@ BUILTIN_EMAIL_SOURCES = [
         "category": "job_board",
         "parser_class": None,  # Uses generic AI parser
     },
+    {
+        "name": "ServiceNow Careers",
+        "sender_pattern": "@servicenow.com",
+        "subject_keywords": "job,career,opportunity,application",
+        "category": "company",
+        "parser_class": None,  # Uses generic AI parser
+    },
+    {
+        "name": "WayUp",
+        "sender_pattern": "@wayup.com",
+        "subject_keywords": "job,jobs,opportunity,career",
+        "category": "job_board",
+        "parser_class": None,  # Uses generic AI parser
+    },
 ]
 
 

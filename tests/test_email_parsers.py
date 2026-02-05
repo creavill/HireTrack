@@ -198,6 +198,27 @@ def test_classify_followup_email():
 
     assert classification == "offer", "Should detect job offer"
 
+    # Test marketing email should NOT be classified as offer
+    subject = "Hi Conner, sale ends Sunday - don't miss out!"
+    snippet = "Up to 40% off selected car cleaning gear"
+    classification = classify_followup_email(subject, snippet)
+    assert (
+        classification != "offer"
+    ), f"Marketing email should not be 'offer', got '{classification}'"
+
+    # Test promo email should NOT be classified as offer
+    subject = "Spend $500, earn 12k points"
+    snippet = "Get the Amtrak Guest Rewards Mastercard. Special offer for new cardmembers."
+    classification = classify_followup_email(subject, snippet)
+    assert classification != "offer", f"Promo email should not be 'offer', got '{classification}'"
+
+    # Test body-based rejection (key phrase only in body, not snippet)
+    subject = "Important information about your application to LetsGetChecked"
+    snippet = "Thank you for your interest in LetsGetChecked"
+    body = "We regret to inform you that we have decided to pursue other candidates"
+    classification = classify_followup_email(subject, snippet, body)
+    assert classification == "rejection", "Should detect rejection from body text"
+
 
 def test_extract_company_from_email():
     """Test company name extraction from email addresses."""
@@ -215,3 +236,21 @@ def test_extract_company_from_email():
     # Test empty
     result = extract_company_from_email("", "")
     assert result == "Unknown", "Empty input should return 'Unknown'"
+
+    # Test email subdomain prefix skipping (e.supercheapauto.com.au → Supercheapauto)
+    result = extract_company_from_email(
+        "Supercheap Auto Club <clubsca@e.supercheapauto.com.au>", "sale ends Sunday"
+    )
+    assert result != "E", f"Should not extract 'E' from email subdomain prefix, got '{result}'"
+
+    # Test email subdomain prefix (e-mail.amtrak.com → Amtrak)
+    result = extract_company_from_email(
+        "Amtrak Guest Rewards <amtrak@e-mail.amtrak.com>", "Spend $500"
+    )
+    assert result != "E Mail", f"Should not extract 'E Mail' from email subdomain, got '{result}'"
+
+    # Test email subdomain prefix (em.linkedin.com → LinkedIn)
+    result = extract_company_from_email(
+        "LinkedIn Premium Team <linkedin@em.linkedin.com>", "grab recruiters attention"
+    )
+    assert result != "Em", f"Should not extract 'Em' from email subdomain, got '{result}'"

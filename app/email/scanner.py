@@ -6,6 +6,7 @@ Phase 2: Follow-Ups — broader queries for confirmations, interviews, rejection
 Phase 3: Discovery — detect potential new job alert sources for user review
 """
 
+import html as html_mod
 import re
 import sqlite3
 import logging
@@ -47,10 +48,8 @@ def _html_to_text(html: str) -> str:
     text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"&nbsp;", " ", text)
-    text = re.sub(r"&amp;", "&", text)
-    text = re.sub(r"&lt;", "<", text)
-    text = re.sub(r"&gt;", ">", text)
+    # Decode all HTML entities (&#xAE;, &middot;, &#039;, &amp;, etc.)
+    text = html_mod.unescape(text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()[:3000]  # Cap at 3000 chars for classification
 
@@ -867,11 +866,18 @@ def classify_followup_email(subject: str, snippet: str, body: str = "") -> str:
     if any(
         word in text
         for word in [
-            "offer",
-            "congratulations",
+            "job offer",
+            "offer letter",
+            "offer of employment",
+            "extend an offer",
+            "extend you an offer",
+            "pleased to offer",
+            "we'd like to offer",
+            "we would like to offer",
             "pleased to extend",
             "compensation package",
             "welcome to the team",
+            "congratulations on your new",
         ]
     ):
         return "offer"
@@ -1057,11 +1063,55 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
             if _is_noreply(raw_email):
                 return cleaned[:50]
 
+    # Common email-sending subdomain prefixes (not company names)
+    EMAIL_SUBDOMAIN_PREFIXES = {
+        "e",
+        "em",
+        "email",
+        "mail",
+        "e-mail",
+        "news",
+        "newsletter",
+        "newsletters",
+        "promo",
+        "promotions",
+        "promotion",
+        "alert",
+        "alerts",
+        "info",
+        "hi",
+        "hello",
+        "team",
+        "teams",
+        "notify",
+        "notification",
+        "notifications",
+        "updates",
+        "update",
+        "marketing",
+        "mktg",
+        "campaign",
+        "campaigns",
+        "send",
+        "sender",
+        "bounce",
+        "support",
+        "noreply",
+        "no-reply",
+        "messages",
+        "msg",
+    }
+
     # Step 2: Try domain extraction
     raw_email = normalize_sender(from_email) if "<" in from_email else from_email
     if "@" in raw_email:
         full_domain = raw_email.split("@")[1].lower()
-        first_part = full_domain.split(".")[0]
+        domain_parts = full_domain.split(".")
+        first_part = domain_parts[0]
+
+        # Skip email-sending subdomain prefixes (e.g. "e" in e.supercheapauto.com.au)
+        if first_part.replace("-", "") in EMAIL_SUBDOMAIN_PREFIXES and len(domain_parts) > 2:
+            first_part = domain_parts[1]
 
         if first_part in GENERIC_DOMAINS:
             pass  # Fall through to subject

@@ -1662,7 +1662,8 @@ def register_routes(app):
         email_sources = _load_email_sources()
         log(f"Loaded {len(email_sources)} email sources:")
         for src in email_sources:
-            log(f"- {src['name']} ({src.get('sender_email', src.get('sender_pattern', 'N/A'))})", 1)
+            source_id = src.get("sender_email") or src.get("sender_pattern") or "N/A"
+            log(f"- {src['name']} ({source_id})", 1)
         log("")
 
         # Fetch most recent emails (broad query)

@@ -1,7 +1,9 @@
 """
-Email Scanner - Scan Gmail for job alerts and follow-up emails
+Email Scanner - Unified three-phase scan pipeline
 
-This module handles scanning Gmail for job board emails and responses.
+Phase 1: Job Alerts — fetch from known sources, parse as job listings
+Phase 2: Follow-Ups — broader queries for confirmations, interviews, rejections
+Phase 3: Discovery — detect potential new job alert sources for user review
 """
 
 import re
@@ -30,6 +32,124 @@ from app.database import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helper: extract headers from a Gmail message
+# ---------------------------------------------------------------------------
+
+
+def _get_headers(message: dict) -> Dict[str, str]:
+    """Extract common headers from a Gmail message."""
+    headers = {}
+    for header in message.get("payload", {}).get("headers", []):
+        name = header["name"].lower()
+        if name in ("subject", "from", "to", "date"):
+            headers[name] = header["value"]
+    return headers
+
+
+# ---------------------------------------------------------------------------
+# Helper: normalise sender
+# ---------------------------------------------------------------------------
+
+
+def normalize_sender(sender_raw: str) -> str:
+    """
+    Extract clean email address from sender string.
+
+    "LinkedIn Jobs <jobs-noreply@linkedin.com>" -> "jobs-noreply@linkedin.com"
+    """
+    match = re.search(r"<([^>]+)>", sender_raw)
+    if match:
+        return match.group(1).lower()
+    return sender_raw.strip().lower()
+
+
+def extract_sender_name(sender_raw: str) -> Optional[str]:
+    """
+    Extract display name from sender string.
+
+    "LinkedIn Jobs <jobs-noreply@linkedin.com>" -> "LinkedIn Jobs"
+    """
+    match = re.match(r"^([^<]+)<", sender_raw)
+    if match:
+        return match.group(1).strip().strip('"')
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Helper: check if sender matches a known email source
+# ---------------------------------------------------------------------------
+
+
+def _matches_any_source(sender: str, sources: list) -> bool:
+    """Return True if sender matches any configured email source."""
+    sender_lower = sender.lower()
+    for source in sources:
+        se = (source.get("sender_email") or "").lower()
+        sp = (source.get("sender_pattern") or "").lower()
+        if se and se in sender_lower:
+            return True
+        if sp:
+            for pattern in sp.split(","):
+                pattern = pattern.strip()
+                if pattern and pattern in sender_lower:
+                    return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Helper: detect follow-up vs job alert
+# ---------------------------------------------------------------------------
+
+
+def looks_like_followup(subject: str, snippet: str) -> bool:
+    """
+    Return True if this email looks like a follow-up (confirmation, interview, etc.)
+    rather than a job alert. Used by discovery phase to skip these.
+    """
+    text = (subject + " " + snippet).lower()
+
+    # Strong job alert signals override follow-up detection
+    job_alert_signals = [
+        "new jobs for you",
+        "job alert",
+        "jobs matching",
+        "we found",
+        "recommended jobs",
+        "jobs you might like",
+        "new opportunities",
+    ]
+    for signal in job_alert_signals:
+        if signal in text:
+            return False
+
+    followup_signals = [
+        "thank you for applying",
+        "received your application",
+        "application confirmed",
+        "interview",
+        "phone screen",
+        "next steps",
+        "unfortunately",
+        "not selected",
+        "other candidates",
+        "offer",
+        "congratulations",
+        "assessment",
+        "coding challenge",
+    ]
+    for signal in followup_signals:
+        if signal in text:
+            return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Load email sources
+# ---------------------------------------------------------------------------
 
 
 def _load_email_sources():
@@ -65,6 +185,11 @@ def _load_email_sources():
     ]
 
 
+# ---------------------------------------------------------------------------
+# Build Gmail query for a source
+# ---------------------------------------------------------------------------
+
+
 def _build_query_for_source(source: dict, after_date: str) -> Optional[str]:
     """
     Build Gmail search query for an email source.
@@ -85,7 +210,6 @@ def _build_query_for_source(source: dict, after_date: str) -> Optional[str]:
     if sender_email:
         query_parts.append(f"from:{sender_email}")
     elif sender_pattern:
-        # Handle patterns like "@linkedin.com"
         patterns = [p.strip() for p in sender_pattern.split(",")]
         if len(patterns) == 1:
             query_parts.append(
@@ -109,23 +233,13 @@ def _build_query_for_source(source: dict, after_date: str) -> Optional[str]:
     return None
 
 
-def scan_emails(days_back: int = 7) -> List[Dict]:
-    """
-    Scan Gmail for job alert emails from configured sources.
+# ---------------------------------------------------------------------------
+# Compute after_date from scan history
+# ---------------------------------------------------------------------------
 
-    Uses the email sources from the database (both built-in and custom).
-    Each source has an associated parser - specialized parsers for known
-    job boards, or the AI parser for custom sources.
 
-    Args:
-        days_back: How many days back to scan on first run (default: 7)
-
-    Returns:
-        List of extracted job dictionaries
-    """
-    service = get_gmail_service()
-
-    # Get last scan date from DB
+def _get_after_date(days_back: int) -> str:
+    """Determine the after_date for Gmail queries based on scan history."""
     conn = sqlite3.connect(DB_PATH)
     last_scan = conn.execute(
         "SELECT last_scan_date FROM scan_history ORDER BY created_at DESC LIMIT 1"
@@ -138,18 +252,26 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
             last_date = last_date + timedelta(seconds=1)
             after_date = last_date.strftime("%Y/%m/%d")
             logger.info(f"Scanning emails after last scan: {after_date}")
-        except:
-            after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
-            logger.warning(f"Date parse failed, scanning last {days_back} days: {after_date}")
-    else:
-        after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
-        logger.info(f"First scan - looking back {days_back} days: {after_date}")
+            return after_date
+        except Exception:
+            pass
 
-    # Load email sources from database
-    email_sources = _load_email_sources()
-    logger.info(f"Loaded {len(email_sources)} email sources to scan")
+    after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
+    logger.info(f"First scan - looking back {days_back} days: {after_date}")
+    return after_date
 
-    # Build queries for each source and create source->parser mapping
+
+# ===================================================================
+# PHASE 1 — Job Alert Emails
+# ===================================================================
+
+
+def _phase1_job_alerts(service, after_date: str, email_sources: list) -> Dict:
+    """
+    Phase 1: Fetch job alert emails from known sources, parse into jobs.
+
+    Returns dict with keys: jobs, total_emails, cleaned_emails, processed_ids
+    """
     source_queries = []
     for source in email_sources:
         query = _build_query_for_source(source, after_date)
@@ -158,22 +280,15 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
             source_queries.append({"query": query, "source": source, "parser": parser})
             logger.debug(f"Source '{source['name']}': {query}")
 
-    # Add fallback queries for follow-up detection
-    followup_queries = [
-        f'(subject:interview OR subject:"next steps" OR subject:update OR subject:"application received") after:{after_date}',
-        f'(subject:unfortunately OR subject:offer OR subject:congratulations OR subject:"thank you for applying") after:{after_date}',
-    ]
-
     all_jobs = []
     seen_job_ids = set()
     total_emails = 0
     cleaned_emails = 0
+    processed_msg_ids = set()
 
-    # Get Gmail client for post-scan cleanup
     gmail_client = get_gmail_client()
-    _hammy_label_id = None  # Lazily cached label ID
+    _hammy_label_id = None
 
-    # Process each source's query
     for sq in source_queries:
         query = sq["query"]
         source_config = sq["source"]
@@ -191,6 +306,10 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
             source_jobs = 0
             for msg_info in messages:
                 msg_id = msg_info["id"]
+
+                if is_email_processed(msg_id):
+                    continue
+
                 try:
                     message = (
                         service.users()
@@ -206,16 +325,13 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
                     if not html:
                         continue
 
-                    # Check if follow-up email (skip these for job extraction)
-                    subject = ""
-                    for header in message.get("payload", {}).get("headers", []):
-                        if header["name"].lower() == "subject":
-                            subject = header["value"].lower()
-                            break
+                    hdrs = _get_headers(message)
+                    subject = (hdrs.get("subject") or "").lower()
 
+                    # Skip follow-up emails that landed in a job alert query
                     is_followup = any(
-                        keyword in subject
-                        for keyword in [
+                        kw in subject
+                        for kw in [
                             "interview",
                             "next steps",
                             "unfortunately",
@@ -225,26 +341,25 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
                             "application update",
                         ]
                     )
-
                     if is_followup:
                         logger.debug(f"Follow-up detected (skipped): {subject[:60]}...")
                         continue
 
-                    # Parse with the appropriate parser
                     jobs = parser.parse(html, email_date)
 
-                    # Deduplicate
                     for job in jobs:
                         if job["job_id"] not in seen_job_ids:
                             seen_job_ids.add(job["job_id"])
                             all_jobs.append(job)
                             source_jobs += 1
 
-                    # Post-scan cleanup: archive or delete job alert emails
-                    # Only applies to Route 1 (job alerts), never to follow-ups
+                    # Mark processed
+                    mark_email_processed(msg_id, "job_alert", source_name)
+                    processed_msg_ids.add(msg_id)
+
+                    # Post-scan cleanup (only for job alerts)
                     if post_scan_action == "archive":
                         try:
-                            # Label before archiving so user can find them later
                             if _hammy_label_id is None:
                                 _hammy_label_id = gmail_client.get_or_create_label("Hammy/Scanned")
                             gmail_client.add_label(msg_id, _hammy_label_id)
@@ -270,26 +385,429 @@ def scan_emails(days_back: int = 7) -> List[Dict]:
             logger.error(f"Query failed for {source_name}: {e}")
             continue
 
-    # Save current scan timestamp
+    return {
+        "jobs": all_jobs,
+        "total_emails": total_emails,
+        "cleaned_emails": cleaned_emails,
+        "processed_ids": processed_msg_ids,
+    }
+
+
+# ===================================================================
+# PHASE 2 — Follow-Up Emails
+# ===================================================================
+
+
+def _phase2_followups(
+    service, after_date: str, email_sources: list, already_processed: set
+) -> Dict:
+    """
+    Phase 2: Broader Gmail queries for confirmation, interview, rejection emails.
+
+    Returns dict with keys: followups, jobs_created
+    """
+    followup_queries = [
+        # Application confirmations
+        f'(subject:"thank you for applying" OR subject:"received your application" '
+        f'OR subject:"application confirmed") after:{after_date}',
+        f'(subject:application OR "your application") after:{after_date}',
+        # Interview / next steps
+        f'(subject:interview OR subject:"phone screen" OR subject:"next steps" '
+        f'OR subject:"schedule") after:{after_date}',
+        # Rejections
+        f'(subject:unfortunately OR subject:"not selected" OR subject:"other candidates" '
+        f'OR subject:"decided to pursue") after:{after_date}',
+        # Offers
+        f'(subject:offer OR subject:congratulations OR subject:"pleased to extend") '
+        f"after:{after_date}",
+        # Assessments
+        f'(subject:assessment OR subject:"coding challenge" OR subject:"take-home") '
+        f"after:{after_date}",
+        # Broad sweeps
+        f'(subject:"your candidacy" OR subject:"your submission" '
+        f'OR subject:"the position" OR subject:"the role") after:{after_date}',
+        f'("thank you for your interest" OR "we appreciate your interest") after:{after_date}',
+    ]
+
+    followups = []
+    seen_message_ids = set(already_processed)
+    jobs_created = 0
+
+    for folder in ["INBOX", "[Gmail]/Spam"]:
+        for query in followup_queries:
+            try:
+                search_query = f"in:spam {query}" if folder == "[Gmail]/Spam" else query
+
+                results = (
+                    service.users()
+                    .messages()
+                    .list(userId="me", q=search_query, maxResults=50)
+                    .execute()
+                )
+                messages = results.get("messages", [])
+
+                for msg_info in messages:
+                    msg_id = msg_info["id"]
+
+                    if msg_id in seen_message_ids:
+                        continue
+                    seen_message_ids.add(msg_id)
+
+                    if is_email_processed(msg_id):
+                        continue
+
+                    try:
+                        message = (
+                            service.users()
+                            .messages()
+                            .get(userId="me", id=msg_id, format="full")
+                            .execute()
+                        )
+
+                        hdrs = _get_headers(message)
+                        subject = hdrs.get("subject", "")
+                        from_email = hdrs.get("from", "")
+                        sender = normalize_sender(from_email)
+
+                        # Skip if this is from a known job alert source
+                        if _matches_any_source(sender, email_sources):
+                            mark_email_processed(msg_id, "skipped", "job_alert_source")
+                            continue
+
+                        snippet = message.get("snippet", "")
+                        email_date = datetime.fromtimestamp(
+                            int(message.get("internalDate", 0)) / 1000
+                        ).isoformat()
+
+                        email_type = classify_followup_email(subject, snippet)
+                        company = extract_company_from_email(from_email, subject)
+                        role = extract_role_from_subject(subject)
+
+                        conn = get_db()
+                        job_id = fuzzy_match_company(company, conn)
+                        conn.close()
+
+                        # Cold application: create job from confirmation
+                        if job_id is None and email_type == "received" and company != "Unknown":
+                            title = role or f"Position at {company}"
+                            job_id = create_job_from_confirmation(
+                                title=title,
+                                company=company,
+                                source="email_confirmation",
+                                email_date=email_date,
+                                status="applied",
+                                applied_date=email_date,
+                                raw_text=snippet[:500],
+                                sender_email=from_email,
+                            )
+                            jobs_created += 1
+                            logger.info(f"Created job from cold application: {title} at {company}")
+
+                        mark_email_processed(msg_id, email_type, "followup_scan")
+
+                        followups.append(
+                            {
+                                "company": company,
+                                "subject": subject[:200],
+                                "type": email_type,
+                                "snippet": snippet[:500],
+                                "email_date": email_date,
+                                "job_id": job_id,
+                                "gmail_message_id": msg_id,
+                                "sender_email": from_email,
+                                "role": role,
+                                "in_spam": folder == "[Gmail]/Spam",
+                            }
+                        )
+
+                        logger.info(
+                            f"{email_type.upper()}: {company} - {subject[:50]}... "
+                            f"(job_id: {job_id or 'none'}, spam: {folder == '[Gmail]/Spam'})"
+                        )
+
+                    except Exception as e:
+                        logger.error(f"Error parsing follow-up email {msg_id}: {e}")
+                        continue
+
+            except Exception as e:
+                logger.error(f"Follow-up query failed - {query[:60]}...: {e}")
+                continue
+
+    return {"followups": followups, "jobs_created": jobs_created}
+
+
+# ===================================================================
+# PHASE 3 — Discover Unknown Job Alert Sources
+# ===================================================================
+
+
+def _phase3_discover_sources(
+    service, after_date: str, known_sources: list, already_processed: set
+) -> Dict:
+    """
+    Phase 3: Find emails that look like job alerts but aren't from known sources.
+
+    Returns dict with keys: discovered (dict of sender -> info), count
+    """
+    discovery_queries = [
+        f'(subject:"job alert" OR subject:"new jobs" OR subject:"jobs for you") '
+        f"after:{after_date}",
+        f'(subject:"new opportunities" OR subject:"matching jobs" '
+        f'OR subject:"jobs matching") after:{after_date}',
+        f'(subject:"career alert" OR subject:"job recommendations") after:{after_date}',
+        f'(subject:"we found" AND subject:job) after:{after_date}',
+        f'(subject:"positions" OR subject:"openings" OR subject:"hiring") after:{after_date}',
+        f"from:*@jobs.* after:{after_date}",
+        f"from:*@careers.* after:{after_date}",
+        f"from:*noreply* (subject:job OR subject:position OR subject:opportunity) "
+        f"after:{after_date}",
+    ]
+
+    # Load dismissed senders so we skip them
+    conn = get_db()
+    try:
+        dismissed = conn.execute(
+            "SELECT sender_email FROM discovered_email_sources WHERE status = 'dismissed'"
+        ).fetchall()
+        dismissed_senders = {row[0].lower() for row in dismissed}
+
+        existing = conn.execute("SELECT sender_email FROM custom_email_sources").fetchall()
+        existing_senders = {row[0].lower() for row in existing if row[0]}
+    except Exception:
+        dismissed_senders = set()
+        existing_senders = set()
+    finally:
+        conn.close()
+
+    discovered_sources = {}
+    seen_ids = set(already_processed)
+
+    for query in discovery_queries:
+        try:
+            results = service.users().messages().list(userId="me", q=query, maxResults=30).execute()
+            messages = results.get("messages", [])
+
+            for msg_info in messages:
+                msg_id = msg_info["id"]
+
+                if msg_id in seen_ids:
+                    continue
+                seen_ids.add(msg_id)
+
+                if is_email_processed(msg_id):
+                    continue
+
+                try:
+                    message = (
+                        service.users()
+                        .messages()
+                        .get(userId="me", id=msg_id, format="metadata")
+                        .execute()
+                    )
+
+                    hdrs = _get_headers(message)
+                    subject = hdrs.get("subject", "")
+                    from_raw = hdrs.get("from", "")
+                    sender = normalize_sender(from_raw)
+                    snippet = message.get("snippet", "")
+
+                    # Skip known, dismissed, or existing sources
+                    if _matches_any_source(sender, known_sources):
+                        continue
+                    if sender in dismissed_senders:
+                        continue
+                    if sender in existing_senders:
+                        continue
+
+                    # Skip if it looks like a follow-up
+                    if looks_like_followup(subject, snippet):
+                        continue
+
+                    email_date = datetime.fromtimestamp(
+                        int(message.get("internalDate", 0)) / 1000
+                    ).isoformat()
+
+                    if sender not in discovered_sources:
+                        discovered_sources[sender] = {
+                            "sender_email": sender,
+                            "sender_name": extract_sender_name(from_raw),
+                            "count": 0,
+                            "sample_subjects": [],
+                            "sample_email_id": msg_id,
+                            "sample_snippet": snippet[:200],
+                            "first_seen": email_date,
+                        }
+
+                    discovered_sources[sender]["count"] += 1
+                    if len(discovered_sources[sender]["sample_subjects"]) < 3:
+                        discovered_sources[sender]["sample_subjects"].append(subject[:120])
+
+                except Exception as e:
+                    logger.debug(f"Discovery: error reading {msg_id}: {e}")
+                    continue
+
+        except Exception as e:
+            logger.debug(f"Discovery query failed: {e}")
+            continue
+
+    # Persist discoveries
+    if discovered_sources:
+        _store_discovered_sources(discovered_sources)
+
+    return {"discovered": discovered_sources, "count": len(discovered_sources)}
+
+
+def _store_discovered_sources(discovered: dict):
+    """Persist discovered sources to the database."""
+    import json
+
+    conn = get_db()
+    now = datetime.now().isoformat()
+    try:
+        for sender, info in discovered.items():
+            existing = conn.execute(
+                "SELECT id, email_count FROM discovered_email_sources WHERE sender_email = ?",
+                (sender,),
+            ).fetchone()
+
+            if existing:
+                conn.execute(
+                    """UPDATE discovered_email_sources
+                       SET email_count = ?, last_seen = ?, updated_at = ?
+                       WHERE id = ?""",
+                    (
+                        (existing["email_count"] or 0) + info["count"],
+                        now,
+                        now,
+                        existing["id"],
+                    ),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO discovered_email_sources
+                       (sender_email, sender_name, email_count, sample_subjects,
+                        sample_snippet, sample_email_id, first_seen, last_seen,
+                        status, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
+                    (
+                        sender,
+                        info.get("sender_name"),
+                        info["count"],
+                        json.dumps(info.get("sample_subjects", [])),
+                        info.get("sample_snippet", ""),
+                        info.get("sample_email_id"),
+                        info.get("first_seen", now),
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to store discovered sources: {e}")
+    finally:
+        conn.close()
+
+
+# ===================================================================
+# PUBLIC API — Unified scan_emails
+# ===================================================================
+
+
+def scan_emails(days_back: int = 7) -> Dict:
+    """
+    Unified three-phase scan pipeline.
+
+    Phase 1: Job alerts from known sources → parsed into job dicts
+    Phase 2: Follow-up emails → confirmations, interviews, rejections
+    Phase 3: Source discovery → potential new job alert sources
+
+    Args:
+        days_back: How many days back to scan on first run (default: 7)
+
+    Returns:
+        Dictionary with all results:
+        {
+            "jobs": [...],
+            "followups": [...],
+            "phase1_jobs": int,
+            "phase2_followups": int,
+            "phase2_jobs_created": int,
+            "phase3_discoveries": int,
+            "total_emails": int,
+            "cleaned_emails": int,
+        }
+    """
+    service = get_gmail_service()
+    after_date = _get_after_date(days_back)
+    email_sources = _load_email_sources()
+    logger.info(f"Loaded {len(email_sources)} email sources to scan")
+
+    # ---- Phase 1: Job Alerts ----
+    p1 = _phase1_job_alerts(service, after_date, email_sources)
+    logger.info(f"Phase 1 complete: {len(p1['jobs'])} jobs from {p1['total_emails']} emails")
+
+    # ---- Phase 2: Follow-Ups ----
+    p2 = _phase2_followups(service, after_date, email_sources, p1["processed_ids"])
+    logger.info(
+        f"Phase 2 complete: {len(p2['followups'])} follow-ups, "
+        f"{p2['jobs_created']} cold-application jobs created"
+    )
+
+    # ---- Phase 3: Source Discovery ----
+    p3 = _phase3_discover_sources(service, after_date, email_sources, p1["processed_ids"])
+    logger.info(f"Phase 3 complete: {p3['count']} new sources discovered")
+
+    # Save scan timestamp
     current_scan_time = datetime.now().isoformat()
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "INSERT INTO scan_history (last_scan_date, emails_found, created_at) VALUES (?, ?, ?)",
-        (current_scan_time, total_emails, current_scan_time),
+        (current_scan_time, p1["total_emails"], current_scan_time),
     )
     conn.commit()
     conn.close()
 
-    if cleaned_emails > 0:
-        logger.info(
-            f"Scan complete: {total_emails} emails checked, {len(all_jobs)} unique jobs extracted, "
-            f"{cleaned_emails} emails cleaned up"
-        )
-    else:
-        logger.info(
-            f"Scan complete: {total_emails} emails checked, {len(all_jobs)} unique jobs extracted"
-        )
-    return all_jobs
+    logger.info(
+        f"Scan complete: {p1['total_emails']} emails, "
+        f"{len(p1['jobs'])} jobs, {len(p2['followups'])} follow-ups, "
+        f"{p3['count']} discoveries"
+    )
+
+    return {
+        "jobs": p1["jobs"],
+        "followups": p2["followups"],
+        "phase1_jobs": len(p1["jobs"]),
+        "phase2_followups": len(p2["followups"]),
+        "phase2_jobs_created": p2["jobs_created"],
+        "phase3_discoveries": p3["count"],
+        "total_emails": p1["total_emails"],
+        "cleaned_emails": p1["cleaned_emails"],
+    }
+
+
+def scan_followup_emails(days_back: int = 30) -> List[Dict]:
+    """
+    Standalone follow-up scan (kept for backwards compatibility with the
+    /api/scan-followups endpoint).
+
+    Delegates to Phase 2 of the unified pipeline.
+    """
+    service = get_gmail_service()
+    after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
+    email_sources = _load_email_sources()
+
+    p2 = _phase2_followups(service, after_date, email_sources, set())
+    logger.info(
+        f"Follow-up scan complete: {len(p2['followups'])} emails found, "
+        f"{p2['jobs_created']} jobs created from cold applications"
+    )
+    return p2["followups"]
+
+
+# ===================================================================
+# Classification & extraction helpers (unchanged API)
+# ===================================================================
 
 
 def classify_followup_email(subject: str, snippet: str) -> str:
@@ -405,10 +923,9 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
     """
     Extract company name from email sender or subject.
 
-    Handles compound domain names (e.g., 'risetechnical' → 'Rise Technical')
+    Handles compound domain names (e.g., 'risetechnical' -> 'Rise Technical')
     and common ATS domains.
     """
-    # Known suffixes to split compound names
     KNOWN_SUFFIXES = [
         "technical",
         "solutions",
@@ -431,7 +948,6 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
         "tech",
     ]
 
-    # Generic email domains to skip
     GENERIC_DOMAINS = [
         "gmail",
         "outlook",
@@ -444,33 +960,25 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
         "aol",
     ]
 
-    # ATS domains to skip (look for company in subject instead)
     ATS_DOMAINS = ["greenhouse", "lever", "workday", "ashbyhq", "smartrecruiters", "icims"]
 
     if "@" in from_email:
-        # Extract domain part
         domain = from_email.split("@")[1].lower()
-        domain = domain.split(".")[0]  # Remove TLD
+        domain = domain.split(".")[0]
 
-        # Skip generic email providers
         if domain in GENERIC_DOMAINS:
-            pass  # Fall through to subject extraction
-        # Skip ATS domains
+            pass
         elif domain in ATS_DOMAINS:
-            pass  # Fall through to subject extraction
+            pass
         else:
-            # Try to split compound names
             company = domain.replace("-", " ").replace("_", " ")
-
             for suffix in KNOWN_SUFFIXES:
                 if company.lower().endswith(suffix) and len(company) > len(suffix):
                     prefix = company[: len(company) - len(suffix)]
                     company = f"{prefix} {suffix}"
                     break
-
             return company.title()
 
-    # Try to extract from subject line
     patterns = [
         r"at\s+([A-Z][A-Za-z0-9\s&.,-]+)",
         r"with\s+([A-Z][A-Za-z0-9\s&.,-]+)",
@@ -500,21 +1008,15 @@ def extract_role_from_subject(subject: str) -> Optional[str]:
     Returns:
         Extracted role/title or None if not found
     """
-    # Common patterns for role extraction
     patterns = [
-        # "application for: DevOps Engineer" / "application for DevOps Engineer at X"
         r"application for[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
         r"your application[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
         r"applied for[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
-        # "position of Cloud Engineer" / "role of DevOps Engineer"
         r"position of\s+(.+?)(?:\s+at\s+|\.|,|\s-\s|$)",
         r"role of\s+(.+?)(?:\s+at\s+|\.|,|\s-\s|$)",
-        # "applied for the position of X" / "interest in the role of X"
         r"applied for (?:the )?(?:position|role)?\s*(?:of )?\s*(.+?)(?:\s+at\s+|\.|,|$)",
         r"interest in (?:the )?(?:position|role)?\s*(?:of )?\s*(.+?)(?:\s+at\s+|\.|,|$)",
-        # "regarding the Cloud Engineer position"
         r"regarding (?:the )?(.+?) (?:position|role)",
-        # "for Software Engineer role/position/job"
         r"for[:\s]+([A-Z][A-Za-z0-9\s/()-]+?)\s+(?:role|position|job)",
         r"(?:role|position)[:\s]+(.+?)(?:\s+at\s+|\s*$)",
     ]
@@ -523,10 +1025,9 @@ def extract_role_from_subject(subject: str) -> Optional[str]:
         match = re.search(pattern, subject, re.IGNORECASE)
         if match:
             role = match.group(1).strip()
-            # Clean up common noise
             role = re.sub(r"^\s*[-:]\s*", "", role)
             role = re.sub(r"\s*[-:]\s*$", "", role)
-            if len(role) > 5 and len(role) < 100:  # Sanity check
+            if len(role) > 5 and len(role) < 100:
                 return role
 
     return None
@@ -566,164 +1067,3 @@ def fuzzy_match_company(email_company: str, conn) -> Optional[str]:
                 return job_id
 
     return None
-
-
-def scan_followup_emails(days_back: int = 30) -> List[Dict]:
-    """
-    Scan Gmail for follow-up emails (interviews, rejections, offers).
-
-    This function handles the unified scan pipeline for follow-up detection:
-    - Scans for confirmation, interview, rejection, offer, and assessment emails
-    - Uses processed_emails table for deduplication
-    - Creates jobs from confirmations when no matching job exists (cold applications)
-    - Extracts company and role information from email content
-
-    Args:
-        days_back: How many days back to scan (default: 30)
-
-    Returns:
-        List of follow-up email dictionaries with job_id attached
-    """
-    service = get_gmail_service()
-    after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
-
-    queries = [
-        # Interview signals
-        f'(subject:interview OR subject:"phone screen" OR subject:"next steps" OR subject:"schedule") after:{after_date}',
-        # Rejection signals
-        f'(subject:unfortunately OR subject:"not selected" OR subject:"other candidates" OR subject:"decided to pursue") after:{after_date}',
-        # Offer signals
-        f'(subject:offer OR subject:congratulations OR subject:"pleased to extend") after:{after_date}',
-        # Assessment signals
-        f'(subject:assessment OR subject:"coding challenge" OR subject:"take-home") after:{after_date}',
-        # Narrow confirmation signals (subject-specific)
-        f'(subject:"received your application" OR subject:"thank you for applying" OR subject:"application for") after:{after_date}',
-        # Broad confirmation sweep — catches most automated confirmations
-        f'(subject:application OR subject:"your candidacy" OR subject:"your submission") after:{after_date}',
-        # Position/role keywords that frequently appear in confirmation and follow-up emails
-        f'(subject:"the position" OR subject:"the role" OR subject:"regarding your") after:{after_date}',
-        # Body-level confirmation patterns (Gmail searches body too)
-        f'("your application" OR "thank you for your interest" OR "we appreciate your interest") after:{after_date}',
-    ]
-
-    followups = []
-    seen_message_ids = set()
-    jobs_created = 0
-
-    for folder in ["INBOX", "[Gmail]/Spam"]:
-        for query in queries:
-            try:
-                if folder == "[Gmail]/Spam":
-                    search_query = f"in:spam {query}"
-                else:
-                    search_query = query
-
-                results = (
-                    service.users()
-                    .messages()
-                    .list(userId="me", q=search_query, maxResults=50)
-                    .execute()
-                )
-                messages = results.get("messages", [])
-
-                for msg_info in messages:
-                    msg_id = msg_info["id"]
-
-                    # Skip if already seen in this scan
-                    if msg_id in seen_message_ids:
-                        continue
-                    seen_message_ids.add(msg_id)
-
-                    # Skip if already processed in previous scans
-                    if is_email_processed(msg_id):
-                        logger.debug(f"Skipping already processed email: {msg_id}")
-                        continue
-
-                    try:
-                        message = (
-                            service.users()
-                            .messages()
-                            .get(userId="me", id=msg_id, format="full")
-                            .execute()
-                        )
-
-                        headers = message.get("payload", {}).get("headers", [])
-                        subject = ""
-                        from_email = ""
-
-                        for header in headers:
-                            if header["name"].lower() == "subject":
-                                subject = header["value"]
-                            elif header["name"].lower() == "from":
-                                from_email = header["value"]
-
-                        snippet = message.get("snippet", "")
-                        email_date = datetime.fromtimestamp(
-                            int(message.get("internalDate", 0)) / 1000
-                        ).isoformat()
-
-                        email_type = classify_followup_email(subject, snippet)
-                        company = extract_company_from_email(from_email, subject)
-                        role = extract_role_from_subject(subject)
-
-                        conn = get_db()
-                        job_id = fuzzy_match_company(company, conn)
-                        conn.close()
-
-                        # Handle cold application confirmations:
-                        # If this is a confirmation email but no matching job exists,
-                        # create a new job from the confirmation data
-                        if job_id is None and email_type == "received" and company != "Unknown":
-                            # Create job from confirmation
-                            title = role or f"Position at {company}"
-                            job_id = create_job_from_confirmation(
-                                title=title,
-                                company=company,
-                                source="email_confirmation",
-                                email_date=email_date,
-                                status="applied",
-                                applied_date=email_date,
-                                raw_text=snippet[:500],
-                                sender_email=from_email,
-                            )
-                            jobs_created += 1
-                            logger.info(
-                                f"✓ Created job from cold application: {title} at {company}"
-                            )
-
-                        # Mark email as processed
-                        mark_email_processed(msg_id, email_type, "followup_scan")
-
-                        followups.append(
-                            {
-                                "company": company,
-                                "subject": subject[:200],
-                                "type": email_type,
-                                "snippet": snippet[:500],
-                                "email_date": email_date,
-                                "job_id": job_id,
-                                "gmail_message_id": msg_id,
-                                "sender_email": from_email,
-                                "role": role,
-                                "in_spam": folder == "[Gmail]/Spam",
-                            }
-                        )
-
-                        logger.info(
-                            f"{email_type.upper()}: {company} - {subject[:50]}... "
-                            f"(job_id: {job_id or 'none'}, spam: {folder == '[Gmail]/Spam'})"
-                        )
-
-                    except Exception as e:
-                        logger.error(f"Error parsing follow-up email {msg_id}: {e}")
-                        continue
-
-            except Exception as e:
-                logger.error(f"Query failed - {search_query}: {e}")
-                continue
-
-    logger.info(
-        f"Follow-up scan complete: {len(followups)} emails found, "
-        f"{jobs_created} jobs created from cold applications"
-    )
-    return followups

@@ -198,6 +198,24 @@ def init_db():
         )
     """)
 
+    # Discovered email sources (auto-detected potential job alert senders)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS discovered_email_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_email TEXT UNIQUE,
+            sender_name TEXT,
+            email_count INTEGER DEFAULT 1,
+            sample_subjects TEXT,
+            sample_snippet TEXT,
+            sample_email_id TEXT,
+            first_seen TEXT,
+            last_seen TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+
     # Run migrations
     run_migrations(conn)
 
@@ -286,6 +304,11 @@ def run_migrations(conn):
         conn.execute(
             "ALTER TABLE custom_email_sources ADD COLUMN post_scan_action TEXT DEFAULT 'none'"
         )
+
+    # Migration: Add enrichment_status column for enrich-then-score pipeline
+    if "enrichment_status" not in jobs_columns:
+        logger.info("Migrating database: adding 'enrichment_status' column to jobs...")
+        conn.execute("ALTER TABLE jobs ADD COLUMN enrichment_status TEXT DEFAULT 'pending'")
 
     # Migration: Add expanded followup columns for enhanced tracking
     followups_columns = {row[1] for row in conn.execute("PRAGMA table_info(followups)").fetchall()}
@@ -561,3 +584,21 @@ def seed_builtin_sources():
     conn.commit()
     conn.close()
     logger.info(f"Seeded {len(BUILTIN_EMAIL_SOURCES)} built-in email sources")
+
+
+def detect_parser_type(sender_email: str) -> str:
+    """Guess the best parser for a sender based on domain patterns."""
+    domain = sender_email.split("@")[-1].lower()
+
+    if "linkedin" in domain:
+        return "linkedin"
+    if "indeed" in domain:
+        return "indeed"
+    if "greenhouse" in domain:
+        return "greenhouse"
+    if "lever" in domain:
+        return "greenhouse"
+    if "wellfound" in domain or "angel" in domain:
+        return "wellfound"
+
+    return "generic"

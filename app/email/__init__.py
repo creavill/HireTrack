@@ -30,7 +30,11 @@ from .scanner import (
     scan_followup_emails,
     classify_followup_email,
     extract_company_from_email,
+    extract_role_from_subject,
     fuzzy_match_company,
+    normalize_sender,
+    extract_sender_name,
+    looks_like_followup,
 )
 
 __all__ = [
@@ -47,5 +51,9 @@ __all__ = [
     "scan_followup_emails",
     "classify_followup_email",
     "extract_company_from_email",
+    "extract_role_from_subject",
     "fuzzy_match_company",
+    "normalize_sender",
+    "extract_sender_name",
+    "looks_like_followup",
 ]

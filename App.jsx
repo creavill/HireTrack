@@ -890,6 +890,8 @@ export default function App() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [debugScanning, setDebugScanning] = useState(false);
+  const [debugResults, setDebugResults] = useState(null);
 
   // Update HTML element and localStorage when dark mode changes
   useEffect(() => {
@@ -1095,6 +1097,43 @@ export default function App() {
       showToast('Scoring failed. Check console for details.', 'error');
     }
     setScoring(false);
+  };
+
+  const handleDebugScan = async () => {
+    setDebugScanning(true);
+    setDebugResults(null);
+    showToast('Running debug scan on recent emails...', 'info');
+    try {
+      const response = await fetch(`${API_BASE}/debug-scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: 10, days_back: 7 }),
+      });
+      const data = await response.json();
+      if (data.error) {
+        showToast(`Debug scan failed: ${data.error}`, 'error');
+      } else {
+        setDebugResults(data);
+        showToast(`Debug scan complete: ${data.emails_processed} emails processed`, 'success');
+      }
+    } catch (err) {
+      console.error('Debug scan failed:', err);
+      showToast('Debug scan failed. Check console for details.', 'error');
+    }
+    setDebugScanning(false);
+  };
+
+  const downloadDebugLog = () => {
+    if (!debugResults?.log_content) return;
+    const blob = new Blob([debugResults.log_content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `debug_scan_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleStatusChange = async (jobId, newStatus) => {
@@ -2309,6 +2348,146 @@ export default function App() {
 
             {/* AI Provider Settings Section */}
             <AIProviderSettings showToast={showToast} />
+
+            {/* Debug Tools Section */}
+            <div className="bg-parchment border border-warm-gray overflow-hidden mb-6">
+              <div className="bg-warm-gray/50 px-4 py-3 border-b border-warm-gray border-l-[3px] border-l-rust">
+                <h3 className="font-body font-bold text-ink flex items-center gap-2">
+                  <AlertCircle size={18} className="text-rust" />
+                  Debug Tools
+                </h3>
+                <p className="text-sm text-slate mt-1">
+                  Test email processing pipeline with verbose logging
+                </p>
+              </div>
+
+              <div className="p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <button
+                    onClick={handleDebugScan}
+                    disabled={debugScanning}
+                    className="flex items-center gap-2 px-4 py-2 bg-rust text-parchment text-sm uppercase tracking-wide font-semibold hover:bg-rust/90 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw size={16} className={debugScanning ? 'animate-spin' : ''} />
+                    {debugScanning ? 'Scanning...' : 'Debug Scan (Last 10 Emails)'}
+                  </button>
+                  {debugResults && (
+                    <button
+                      onClick={downloadDebugLog}
+                      className="flex items-center gap-2 px-4 py-2 border border-warm-gray text-ink text-sm uppercase tracking-wide font-semibold hover:bg-warm-gray/50 transition-colors"
+                    >
+                      <FileText size={16} />
+                      Download Log
+                    </button>
+                  )}
+                </div>
+
+                {debugResults && (
+                  <div className="space-y-3">
+                    <div className="text-sm text-slate">
+                      Processed <strong className="text-ink">{debugResults.emails_processed}</strong> emails
+                      {debugResults.log_file && (
+                        <span className="ml-2">| Log saved to: <code className="text-xs bg-warm-gray/50 px-1 py-0.5">{debugResults.log_file}</code></span>
+                      )}
+                    </div>
+
+                    {/* Per-email results */}
+                    <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                      {debugResults.results?.map((email, i) => (
+                        <details key={email.msg_id || i} className="border border-warm-gray">
+                          <summary className="px-3 py-2 bg-warm-gray/20 cursor-pointer hover:bg-warm-gray/40 transition-colors">
+                            <span className="font-body font-semibold text-sm text-ink">
+                              #{email.index} {email.subject || '(no subject)'}
+                            </span>
+                            <span className="ml-2 text-xs">
+                              {email.classification && (
+                                <span className={`inline-block px-1.5 py-0.5 uppercase tracking-wide font-semibold ${
+                                  email.classification === 'rejection' ? 'bg-rust/20 text-rust' :
+                                  email.classification === 'interview' ? 'bg-patina/20 text-patina' :
+                                  email.classification === 'offer' ? 'bg-patina/30 text-patina' :
+                                  email.classification === 'received' ? 'bg-copper/20 text-copper' :
+                                  'bg-warm-gray/30 text-slate'
+                                }`}>
+                                  {email.classification}
+                                </span>
+                              )}
+                              {email.matches_known_source && (
+                                <span className="inline-block ml-1 px-1.5 py-0.5 bg-patina/20 text-patina uppercase tracking-wide font-semibold">
+                                  source match
+                                </span>
+                              )}
+                              {email.already_processed && (
+                                <span className="inline-block ml-1 px-1.5 py-0.5 bg-warm-gray/40 text-slate uppercase tracking-wide font-semibold">
+                                  already processed
+                                </span>
+                              )}
+                            </span>
+                          </summary>
+                          <div className="px-3 py-2 text-xs font-mono space-y-1 bg-parchment">
+                            <div><span className="text-slate">From:</span> <span className="text-ink">{email.from}</span></div>
+                            <div><span className="text-slate">Sender:</span> <span className="text-ink">{email.sender}</span></div>
+                            <div><span className="text-slate">Display Name:</span> <span className="text-ink">{email.display_name}</span></div>
+                            <div><span className="text-slate">Date:</span> <span className="text-ink">{email.date}</span></div>
+                            <div><span className="text-slate">Classification:</span> <span className="text-ink font-bold">{email.classification}</span></div>
+                            <div><span className="text-slate">Company:</span> <span className="text-ink">{email.company}</span></div>
+                            <div><span className="text-slate">Role:</span> <span className="text-ink">{email.role || '(none extracted)'}</span></div>
+                            <div><span className="text-slate">Matches Source:</span> <span className="text-ink">{email.matches_known_source ? `Yes (${email.matched_source})` : 'No'}</span></div>
+                            <div><span className="text-slate">Body Length:</span> <span className="text-ink">{email.body_length} chars</span></div>
+                            {email.ai_score !== undefined && (
+                              <>
+                                <div className="mt-1 pt-1 border-t border-warm-gray/50">
+                                  <span className="text-slate">AI Keep:</span> <span className="text-ink">{email.ai_keep ? 'Yes' : 'No'}</span>
+                                </div>
+                                <div><span className="text-slate">AI Score:</span> <span className="text-ink">{email.ai_score}</span></div>
+                                <div><span className="text-slate">AI Reason:</span> <span className="text-ink">{email.ai_reason}</span></div>
+                              </>
+                            )}
+                            {email.ai_error && (
+                              <div className="text-rust"><span className="text-slate">AI Error:</span> {email.ai_error}</div>
+                            )}
+                            {email.snippet && (
+                              <div className="mt-1 pt-1 border-t border-warm-gray/50">
+                                <span className="text-slate">Snippet:</span>
+                                <div className="text-ink mt-0.5 whitespace-pre-wrap">{email.snippet}</div>
+                              </div>
+                            )}
+                            {email.body_preview && (
+                              <div className="mt-1 pt-1 border-t border-warm-gray/50">
+                                <span className="text-slate">Body Preview:</span>
+                                <div className="text-ink mt-0.5 whitespace-pre-wrap max-h-40 overflow-y-auto">{email.body_preview}</div>
+                              </div>
+                            )}
+                            {email.error && (
+                              <div className="text-rust mt-1"><span className="text-slate">Error:</span> {email.error}</div>
+                            )}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+
+                    {/* Raw log content */}
+                    {debugResults.log_content && (
+                      <details className="border border-warm-gray">
+                        <summary className="px-3 py-2 bg-warm-gray/20 cursor-pointer hover:bg-warm-gray/40 transition-colors font-body font-semibold text-sm text-ink">
+                          Full Log Output
+                        </summary>
+                        <pre className="px-3 py-2 text-xs font-mono text-ink whitespace-pre-wrap max-h-96 overflow-y-auto bg-parchment">
+                          {debugResults.log_content}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                {!debugResults && !debugScanning && (
+                  <p className="text-sm text-slate">
+                    Click "Debug Scan" to fetch your 10 most recent emails and process them through
+                    the full pipeline with verbose logging. This helps diagnose classification,
+                    company extraction, and scoring issues. A log file will be saved for review.
+                  </p>
+                )}
+              </div>
+            </div>
           </>
         )
           } />

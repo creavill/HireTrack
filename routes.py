@@ -9,7 +9,7 @@ import json
 import hashlib
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import jsonify, request
 from werkzeug.utils import secure_filename
 
@@ -1596,6 +1596,248 @@ def register_routes(app):
             return jsonify({"activities": [], "error": str(e)})
         finally:
             conn.close()
+
+    # ===================================================================
+    # Debug Scan Endpoint
+    # ===================================================================
+
+    @app.route("/api/debug-scan", methods=["POST"])
+    def api_debug_scan():
+        """
+        Debug scan: process the N most recent emails with full verbose logging.
+
+        Route: POST /api/debug-scan
+
+        Request Body (optional JSON):
+            - count: Number of recent emails to process (default 10, max 25)
+            - days_back: How many days to look back (default 7)
+
+        Returns:
+            JSON with:
+            - log_file: Path to the generated debug log file
+            - emails_processed: Number of emails examined
+            - results: Array of per-email debug info
+        """
+        import io
+        import textwrap
+        from app.email.scanner import (
+            _html_to_text,
+            _get_headers,
+            normalize_sender,
+            extract_sender_name,
+            classify_followup_email,
+            extract_company_from_email,
+            extract_role_from_subject,
+            _matches_any_source,
+            _load_email_sources,
+        )
+        from app.email.client import get_gmail_service, get_email_body
+        from app.database import is_email_processed
+
+        data = request.get_json() or {}
+        count = min(data.get("count", 10), 25)
+        days_back = data.get("days_back", 7)
+
+        after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
+
+        log_lines = []
+
+        def log(msg, indent=0):
+            prefix = "  " * indent
+            line = f"{prefix}{msg}"
+            log_lines.append(line)
+            logger.debug(f"[DEBUG-SCAN] {line}")
+
+        log(f"=== Hammy Debug Scan ===")
+        log(f"Timestamp: {datetime.now().isoformat()}")
+        log(f"Looking back {days_back} days (after {after_date})")
+        log(f"Processing up to {count} emails")
+        log("")
+
+        try:
+            service = get_gmail_service()
+        except Exception as e:
+            return jsonify({"error": f"Gmail auth failed: {e}"}), 500
+
+        email_sources = _load_email_sources()
+        log(f"Loaded {len(email_sources)} email sources:")
+        for src in email_sources:
+            log(f"- {src['name']} ({src.get('sender_email', src.get('sender_pattern', 'N/A'))})", 1)
+        log("")
+
+        # Fetch most recent emails (broad query)
+        queries = [
+            f"after:{after_date}",
+        ]
+
+        all_msg_ids = []
+        for q in queries:
+            try:
+                results = (
+                    service.users().messages().list(userId="me", q=q, maxResults=count).execute()
+                )
+                for m in results.get("messages", []):
+                    if m["id"] not in [x["id"] for x in all_msg_ids]:
+                        all_msg_ids.append(m)
+            except Exception as e:
+                log(f"ERROR fetching emails: {e}")
+
+        all_msg_ids = all_msg_ids[:count]
+        log(f"Fetched {len(all_msg_ids)} message IDs from Gmail")
+        log("")
+
+        # Load resume for scoring context
+        resume_text = load_resumes()
+
+        results = []
+        for idx, msg_info in enumerate(all_msg_ids):
+            msg_id = msg_info["id"]
+            log(f"--- Email {idx + 1}/{len(all_msg_ids)} (ID: {msg_id}) ---")
+
+            email_result = {
+                "msg_id": msg_id,
+                "index": idx + 1,
+            }
+
+            try:
+                message = (
+                    service.users().messages().get(userId="me", id=msg_id, format="full").execute()
+                )
+
+                hdrs = _get_headers(message)
+                subject = hdrs.get("subject", "(no subject)")
+                from_raw = hdrs.get("from", "(unknown)")
+                sender = normalize_sender(from_raw)
+                display_name = extract_sender_name(from_raw)
+                snippet = message.get("snippet", "")
+                email_date = datetime.fromtimestamp(
+                    int(message.get("internalDate", 0)) / 1000
+                ).isoformat()
+
+                log(f"From:     {from_raw}")
+                log(f"Sender:   {sender}")
+                log(f"Display:  {display_name}")
+                log(f"Subject:  {subject}")
+                log(f"Date:     {email_date}")
+                log(f"Snippet:  {snippet[:200]}...")
+                log("")
+
+                email_result.update(
+                    {
+                        "from": from_raw,
+                        "sender": sender,
+                        "display_name": display_name,
+                        "subject": subject,
+                        "date": email_date,
+                        "snippet": snippet[:300],
+                    }
+                )
+
+                # Check if already processed
+                already = is_email_processed(msg_id)
+                log(f"Already processed: {already}")
+                email_result["already_processed"] = already
+
+                # Check if matches a known source
+                matches_source = _matches_any_source(sender, email_sources)
+                matched_source_name = None
+                if matches_source:
+                    for src in email_sources:
+                        se = (src.get("sender_email") or "").lower()
+                        if se and se in sender.lower():
+                            matched_source_name = src["name"]
+                            break
+                log(
+                    f"Matches known source: {matches_source}"
+                    + (f" ({matched_source_name})" if matched_source_name else "")
+                )
+                email_result["matches_known_source"] = matches_source
+                email_result["matched_source"] = matched_source_name
+
+                # Get full body
+                body_html = get_email_body(message.get("payload", {}))
+                body_text = _html_to_text(body_html) if body_html else ""
+                body_len = len(body_text)
+                log(f"Body length: {body_len} chars")
+                if body_text:
+                    log(f"Body preview (first 500 chars):")
+                    for line in textwrap.wrap(body_text[:500], width=100):
+                        log(f"  {line}", 1)
+                log("")
+                email_result["body_length"] = body_len
+                email_result["body_preview"] = body_text[:500]
+
+                # Classify
+                email_type = classify_followup_email(subject, snippet, body_text)
+                log(f"Classification: {email_type}")
+                email_result["classification"] = email_type
+
+                # Extract company
+                company = extract_company_from_email(from_raw, subject)
+                log(f"Extracted company: {company}")
+                email_result["company"] = company
+
+                # Extract role
+                role = extract_role_from_subject(subject)
+                log(f"Extracted role: {role}")
+                email_result["role"] = role
+
+                # AI scoring (if resume available and it's a job-like email)
+                if resume_text and matches_source:
+                    log(f"AI scoring context:")
+                    job_stub = {
+                        "title": subject[:100],
+                        "company": company,
+                        "location": "Unknown",
+                        "raw_text": body_text[:500] if body_text else snippet[:300],
+                    }
+                    try:
+                        keep, score, reason = ai_filter_and_score(job_stub, resume_text)
+                        log(f"  Keep: {keep}")
+                        log(f"  Score: {score}")
+                        log(f"  Reason: {reason}")
+                        email_result["ai_keep"] = keep
+                        email_result["ai_score"] = score
+                        email_result["ai_reason"] = reason
+                    except Exception as e:
+                        log(f"  AI scoring error: {e}")
+                        email_result["ai_error"] = str(e)
+
+                log("")
+                email_result["status"] = "ok"
+
+            except Exception as e:
+                log(f"ERROR processing email {msg_id}: {e}")
+                email_result["status"] = "error"
+                email_result["error"] = str(e)
+
+            results.append(email_result)
+
+        # Write log file
+        log("")
+        log(f"=== Debug Scan Complete ===")
+        log(f"Processed {len(results)} emails")
+
+        log_content = "\n".join(log_lines)
+        log_filename = f"debug_scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        log_path = os.path.join(APP_DIR, log_filename)
+
+        try:
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(log_content)
+            logger.info(f"Debug scan log written to {log_path}")
+        except Exception as e:
+            logger.error(f"Failed to write debug log: {e}")
+            log_path = None
+
+        return jsonify(
+            {
+                "emails_processed": len(results),
+                "log_file": log_path,
+                "log_content": log_content,
+                "results": results,
+            }
+        )
 
     # ===================================================================
     # Enrich-Pending Endpoint

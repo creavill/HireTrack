@@ -35,6 +35,27 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Helper: strip HTML to plain text
+# ---------------------------------------------------------------------------
+
+
+def _html_to_text(html: str) -> str:
+    """Convert HTML email body to plain text for classification."""
+    if not html:
+        return ""
+    text = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&nbsp;", " ", text)
+    text = re.sub(r"&amp;", "&", text)
+    text = re.sub(r"&lt;", "<", text)
+    text = re.sub(r"&gt;", ">", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()[:3000]  # Cap at 3000 chars for classification
+
+
+# ---------------------------------------------------------------------------
 # Helper: extract headers from a Gmail message
 # ---------------------------------------------------------------------------
 
@@ -479,7 +500,11 @@ def _phase2_followups(
                             int(message.get("internalDate", 0)) / 1000
                         ).isoformat()
 
-                        email_type = classify_followup_email(subject, snippet)
+                        # Get full body text for better classification
+                        body_html = get_email_body(message.get("payload", {}))
+                        body_text = _html_to_text(body_html) if body_html else ""
+
+                        email_type = classify_followup_email(subject, snippet, body_text)
                         company = extract_company_from_email(from_email, subject)
                         role = extract_role_from_subject(subject)
 
@@ -490,6 +515,7 @@ def _phase2_followups(
                         # Cold application: create job from confirmation
                         if job_id is None and email_type == "received" and company != "Unknown":
                             title = role or f"Position at {company}"
+                            raw = body_text[:500] if body_text else snippet[:500]
                             job_id = create_job_from_confirmation(
                                 title=title,
                                 company=company,
@@ -497,7 +523,7 @@ def _phase2_followups(
                                 email_date=email_date,
                                 status="applied",
                                 applied_date=email_date,
-                                raw_text=snippet[:500],
+                                raw_text=raw,
                                 sender_email=from_email,
                             )
                             jobs_created += 1
@@ -810,14 +836,18 @@ def scan_followup_emails(days_back: int = 30) -> List[Dict]:
 # ===================================================================
 
 
-def classify_followup_email(subject: str, snippet: str) -> str:
+def classify_followup_email(subject: str, snippet: str, body: str = "") -> str:
     """
-    Classify follow-up email type based on subject and snippet.
+    Classify follow-up email type based on subject, snippet, and body.
+
+    The body parameter is important because Gmail snippets are only ~160 chars
+    and may not contain the key phrases (e.g., a rejection phrase buried in
+    the middle of the email).
 
     Returns:
         Email type: 'interview', 'rejection', 'received', 'offer', 'assessment', or 'update'
     """
-    text = (subject + " " + snippet).lower()
+    text = (subject + " " + snippet + " " + body).lower()
 
     if any(
         word in text
@@ -864,12 +894,22 @@ def classify_followup_email(subject: str, snippet: str) -> str:
         for word in [
             "unfortunately",
             "not moving forward",
+            "won't be moving forward",
+            "will not be moving forward",
             "other candidates",
             "decided to pursue",
+            "decided not to move forward",
             "not selected",
             "will not be moving",
             "unable to move forward",
             "chosen to move forward with",
+            "we regret to inform",
+            "regret to inform you",
+            "position has been filled",
+            "no longer considering",
+            "pursuing other applicants",
+            "not be proceeding",
+            "won't be proceeding",
         ]
     ):
         return "rejection"
@@ -923,6 +963,11 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
     """
     Extract company name from email sender or subject.
 
+    Priority:
+    1. Display name in sender (e.g., "Prop Firm Match Global <noreply@ats.com>")
+    2. Domain name (if not generic/ATS)
+    3. Subject line patterns (at/with/from Company)
+
     Handles compound domain names (e.g., 'risetechnical' -> 'Rise Technical')
     and common ATS domains.
     """
@@ -960,18 +1005,70 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
         "aol",
     ]
 
-    ATS_DOMAINS = ["greenhouse", "lever", "workday", "ashbyhq", "smartrecruiters", "icims"]
+    # ATS domains — check all parts of the domain, not just the first
+    ATS_DOMAINS = [
+        "greenhouse",
+        "lever",
+        "workday",
+        "ashbyhq",
+        "smartrecruiters",
+        "icims",
+        "workablemail",
+        "workable",
+        "candidates",
+        "applytojob",
+        "myworkdayjobs",
+        "taleo",
+        "breezy",
+        "jobvite",
+        "recruitee",
+    ]
 
-    if "@" in from_email:
-        domain = from_email.split("@")[1].lower()
-        domain = domain.split(".")[0]
+    # Noreply-style usernames that indicate ATS (domain might look like a company)
+    ATS_USERNAMES = ["noreply", "no-reply", "donotreply", "do-not-reply", "notifications"]
 
-        if domain in GENERIC_DOMAINS:
-            pass
-        elif domain in ATS_DOMAINS:
-            pass
+    def _is_ats_domain(full_domain: str) -> bool:
+        """Check if any part of the domain matches an ATS provider."""
+        parts = full_domain.lower().split(".")
+        return any(part in ATS_DOMAINS for part in parts)
+
+    def _is_noreply(email_addr: str) -> bool:
+        """Check if the email username looks like a noreply address."""
+        username = email_addr.split("@")[0].lower()
+        return any(nr in username for nr in ATS_USERNAMES)
+
+    # Step 1: Try to extract from display name (most reliable for ATS emails)
+    display_name = extract_sender_name(from_email)
+    if display_name:
+        # Clean up display name — remove common noise
+        cleaned = re.sub(
+            r"\s*[-–—]\s*(FZCO|LLC|Inc|Corp|Ltd|Careers|Recruiting|Talent|HR|Team)\s*\.?\s*$",
+            "",
+            display_name,
+            flags=re.IGNORECASE,
+        ).strip()
+        # Only use display name if it looks like a company (not a person's name or generic)
+        if cleaned and len(cleaned) > 2 and not cleaned.lower().startswith("noreply"):
+            # Check if the email is from an ATS — if so, display name IS the company
+            raw_email = normalize_sender(from_email)
+            if _is_ats_domain(raw_email.split("@")[1]) if "@" in raw_email else False:
+                return cleaned[:50]
+            # If noreply sender, display name is likely the company
+            if _is_noreply(raw_email):
+                return cleaned[:50]
+
+    # Step 2: Try domain extraction
+    raw_email = normalize_sender(from_email) if "<" in from_email else from_email
+    if "@" in raw_email:
+        full_domain = raw_email.split("@")[1].lower()
+        first_part = full_domain.split(".")[0]
+
+        if first_part in GENERIC_DOMAINS:
+            pass  # Fall through to subject
+        elif _is_ats_domain(full_domain):
+            pass  # Fall through to subject (or already handled by display name)
         else:
-            company = domain.replace("-", " ").replace("_", " ")
+            company = first_part.replace("-", " ").replace("_", " ")
             for suffix in KNOWN_SUFFIXES:
                 if company.lower().endswith(suffix) and len(company) > len(suffix):
                     prefix = company[: len(company) - len(suffix)]
@@ -979,6 +1076,7 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
                     break
             return company.title()
 
+    # Step 3: Try subject line patterns
     patterns = [
         r"at\s+([A-Z][A-Za-z0-9\s&.,-]+)",
         r"with\s+([A-Z][A-Za-z0-9\s&.,-]+)",
@@ -995,6 +1093,10 @@ def extract_company_from_email(from_email: str, subject: str) -> str:
             )
             return company[:50]
 
+    # Step 4: Last resort — use display name even if not from ATS
+    if display_name and len(display_name) > 2:
+        return display_name[:50]
+
     return "Unknown"
 
 
@@ -1009,15 +1111,21 @@ def extract_role_from_subject(subject: str) -> Optional[str]:
         Extracted role/title or None if not found
     """
     patterns = [
-        r"application for[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
-        r"your application[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
-        r"applied for[:\s]+(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
-        r"position of\s+(.+?)(?:\s+at\s+|\.|,|\s-\s|$)",
-        r"role of\s+(.+?)(?:\s+at\s+|\.|,|\s-\s|$)",
+        # "application for Senior Engineer at Company"
+        r"application for[:\s]+(?:the\s+)?(.+?)(?:\s+at\s+|\s+with\s+|\s*$)",
+        # "applied for the DevOps Engineer role"
         r"applied for (?:the )?(?:position|role)?\s*(?:of )?\s*(.+?)(?:\s+at\s+|\.|,|$)",
-        r"interest in (?:the )?(?:position|role)?\s*(?:of )?\s*(.+?)(?:\s+at\s+|\.|,|$)",
+        # "position of Cloud Engineer"
+        r"position of\s+(.+?)(?:\s+at\s+|\.|,|\s-\s|$)",
+        # "role of Backend Developer"
+        r"role of\s+(.+?)(?:\s+at\s+|\.|,|\s-\s|$)",
+        # "interest in the Software Engineer position"
+        r"interest in (?:the )?(.+?) (?:position|role)",
+        # "regarding the Cloud Engineer position"
         r"regarding (?:the )?(.+?) (?:position|role)",
+        # "for Software Engineer role/position/job"
         r"for[:\s]+([A-Z][A-Za-z0-9\s/()-]+?)\s+(?:role|position|job)",
+        # "role: Software Engineer" or "position: DevOps"
         r"(?:role|position)[:\s]+(.+?)(?:\s+at\s+|\s*$)",
     ]
 
@@ -1027,6 +1135,9 @@ def extract_role_from_subject(subject: str) -> Optional[str]:
             role = match.group(1).strip()
             role = re.sub(r"^\s*[-:]\s*", "", role)
             role = re.sub(r"\s*[-:]\s*$", "", role)
+            # Filter out bad matches: prepositions, too short, or just a company name
+            if role.lower().startswith(("to ", "at ", "with ", "from ")):
+                continue
             if len(role) > 5 and len(role) < 100:
                 return role
 

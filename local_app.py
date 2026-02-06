@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
 """
-Hammy the Hire Tracker - Main Application Entry Point
+Hammy the Hire Tracker - Legacy Entry Point
 
-AI-powered job tracking system with Gmail integration.
-Go HAM on your job search! 🐷
+DEPRECATED: Use run.py instead for production deployments.
+
+This file is maintained for backwards compatibility only.
+New features should use the application factory pattern in run.py.
+
+Usage (recommended):
+    python run.py
+
+Usage (legacy):
+    python local_app.py
 """
+
+import warnings
+warnings.warn(
+    "local_app.py is deprecated. Use 'python run.py' instead for production deployments.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import os
 import logging

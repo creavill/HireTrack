@@ -1,5 +1,11 @@
 """
 Shared utilities for Job Tracker Lambda functions.
+
+NOTE: This file contains AWS-specific utilities (DynamoDB, S3, Secrets Manager)
+for Lambda deployments. The current application uses SQLite locally.
+
+These utilities are only used when deploying to AWS Lambda.
+For local development, use the SQLite-based app via 'python run.py'.
 """
 
 import json

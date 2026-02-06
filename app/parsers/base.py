@@ -150,3 +150,151 @@ class BaseParser(ABC):
         clean_url = BaseParser.clean_job_url(url)
         content = f"{clean_url}:{title}:{company}".lower()
         return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+    @staticmethod
+    def validate_job(job: dict) -> tuple:
+        """
+        Validate job data quality and detect parsing issues.
+
+        Args:
+            job: Job dictionary to validate
+
+        Returns:
+            Tuple of (is_valid, issues) where issues is a list of problems
+        """
+        issues = []
+
+        title = job.get("title", "")
+        company = job.get("company", "")
+
+        # Check for empty required fields
+        if not title or title.strip() == "":
+            issues.append("missing_title")
+        if not company or company.strip() == "":
+            issues.append("missing_company")
+
+        # Check for duplicate word patterns (e.g., "Position at Us at Us")
+        if title:
+            words = title.lower().split()
+            if len(words) >= 4:
+                # Check for repeated phrase patterns
+                for i in range(len(words) - 3):
+                    if words[i:i+2] == words[i+2:i+4]:
+                        issues.append("duplicate_pattern_in_title")
+                        break
+
+        # Check for placeholder or generic titles
+        generic_titles = [
+            "position", "job", "role", "opportunity", "opening",
+            "ready to interview", "new job", "job alert", "job match"
+        ]
+        if title and title.lower().strip() in generic_titles:
+            issues.append("generic_title")
+
+        # Check for suspicious company names
+        if company:
+            company_lower = company.lower().strip()
+            if company_lower in ["unknown", "company", "hiring", "confidential", "n/a", ""]:
+                issues.append("invalid_company")
+            # Check for repeated words in company name
+            company_words = company_lower.split()
+            if len(company_words) >= 2 and len(set(company_words)) < len(company_words) / 2:
+                issues.append("duplicate_pattern_in_company")
+
+        # Check for excessively short titles (likely parsing errors)
+        if title and len(title.strip()) < 3:
+            issues.append("title_too_short")
+
+        # Check for titles that are just company names
+        if title and company and title.lower().strip() == company.lower().strip():
+            issues.append("title_is_company_name")
+
+        # Check URL validity
+        url = job.get("url", "")
+        if url:
+            if not url.startswith(("http://", "https://")):
+                issues.append("invalid_url")
+        else:
+            issues.append("missing_url")
+
+        is_valid = len(issues) == 0
+        return (is_valid, issues)
+
+    @staticmethod
+    def normalize_title(title: str) -> str:
+        """
+        Normalize job title by removing common noise.
+
+        Args:
+            title: Raw job title
+
+        Returns:
+            Normalized title
+        """
+        if not title:
+            return ""
+
+        # Remove common prefixes
+        prefixes_to_remove = [
+            "new:", "hot:", "urgent:", "immediate:",
+            "re:", "fwd:", "fw:"
+        ]
+        title_lower = title.lower()
+        for prefix in prefixes_to_remove:
+            if title_lower.startswith(prefix):
+                title = title[len(prefix):].strip()
+                title_lower = title.lower()
+
+        # Remove location suffixes that are duplicated
+        # e.g., "Engineer - Remote - Remote" -> "Engineer - Remote"
+        parts = [p.strip() for p in title.split(" - ")]
+        if len(parts) > 1:
+            # Remove consecutive duplicates
+            deduped = [parts[0]]
+            for part in parts[1:]:
+                if part.lower() != deduped[-1].lower():
+                    deduped.append(part)
+            title = " - ".join(deduped)
+
+        return title.strip()
+
+    @staticmethod
+    def is_likely_duplicate(job1: dict, job2: dict) -> bool:
+        """
+        Check if two jobs are likely duplicates even with different IDs.
+
+        Uses fuzzy matching on title and company to detect duplicates
+        that slipped through URL-based deduplication.
+
+        Args:
+            job1: First job dictionary
+            job2: Second job dictionary
+
+        Returns:
+            True if jobs appear to be duplicates
+        """
+        # Exact match
+        if (job1.get("title", "").lower() == job2.get("title", "").lower() and
+            job1.get("company", "").lower() == job2.get("company", "").lower()):
+            return True
+
+        # Normalize and compare
+        title1 = BaseParser.normalize_title(job1.get("title", "")).lower()
+        title2 = BaseParser.normalize_title(job2.get("title", "")).lower()
+        company1 = job1.get("company", "").lower().strip()
+        company2 = job2.get("company", "").lower().strip()
+
+        # Same company, similar title
+        if company1 == company2 and company1:
+            # Check if one title contains the other
+            if title1 in title2 or title2 in title1:
+                return True
+            # Check word overlap
+            words1 = set(title1.split())
+            words2 = set(title2.split())
+            if words1 and words2:
+                overlap = len(words1 & words2) / min(len(words1), len(words2))
+                if overlap > 0.8:
+                    return True
+
+        return False

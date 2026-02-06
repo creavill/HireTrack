@@ -324,6 +324,45 @@ def run_migrations(conn):
         conn.execute("ALTER TABLE followups ADD COLUMN is_read INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE followups ADD COLUMN ai_summary TEXT")
 
+    # Migration: Create enhanced scan_runs table for comprehensive scan history
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scan_runs (
+                run_id TEXT PRIMARY KEY,
+                operation_type TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                status TEXT DEFAULT 'running',
+
+                -- Scan metrics
+                emails_found INTEGER DEFAULT 0,
+                jobs_found INTEGER DEFAULT 0,
+                jobs_stored INTEGER DEFAULT 0,
+                jobs_filtered INTEGER DEFAULT 0,
+                jobs_duplicate INTEGER DEFAULT 0,
+                jobs_enriched INTEGER DEFAULT 0,
+                jobs_scored INTEGER DEFAULT 0,
+                followups_found INTEGER DEFAULT 0,
+
+                -- Error tracking
+                errors_count INTEGER DEFAULT 0,
+                error_details TEXT,
+
+                -- Configuration snapshot
+                scan_days INTEGER,
+                ai_provider TEXT,
+                resume_count INTEGER,
+
+                -- Log file reference
+                log_file TEXT,
+
+                -- Summary
+                summary TEXT
+            )
+        """)
+    except Exception:
+        pass  # Table already exists
+
 
 def get_db():
     """

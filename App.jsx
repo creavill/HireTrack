@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Search, RefreshCw, FileText, ExternalLink, ChevronDown, ChevronUp, Filter, Briefcase, CheckCircle, XCircle, Clock, Star, Plus, Mail, Phone, User, Upload, Edit2, Trash2, Sparkles, AlertCircle, Menu, X, Settings, Building2, FileStack, Map, BarChart3, Archive, Download, Copy, FileDown, HelpCircle, ArrowUpDown } from 'lucide-react';
+import { Search, RefreshCw, FileText, ExternalLink, ChevronDown, ChevronUp, Filter, Briefcase, CheckCircle, XCircle, Clock, Star, Plus, Mail, Phone, User, Upload, Edit2, Trash2, Sparkles, AlertCircle, Menu, X, Settings, Building2, FileStack, Map, BarChart3, Archive, Download, Copy, FileDown, HelpCircle, ArrowUpDown, Trophy } from 'lucide-react';
 import JobRow from './components/JobRow.jsx';
 import JobDetailPage from './components/JobDetailPage.jsx';
 import ActionBanner from './components/ActionBanner.jsx';
 import AIProviderSettings from './components/AIProviderSettings.jsx';
 import EmailSourcesSettings from './components/EmailSourcesSettings.jsx';
+import { GamificationWidget, AchievementsView } from './components/GamificationWidget.jsx';
 
 // Sidebar component for vertical navigation
 function Sidebar({ activeView, setActiveView, counts, sidebarOpen, setSidebarOpen, onNavigateHome }) {
   const navItems = [
     { id: 'all_applications', label: 'Jobs', icon: Briefcase, count: counts.jobs },
+    { id: 'achievements', label: 'Progress', icon: Trophy, count: null },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, count: null },
     { id: 'followups', label: 'Follow-ups', icon: Mail, count: counts.followups },
     { id: 'resumes', label: 'Resumes', icon: FileStack, count: counts.resumes },
@@ -80,10 +82,12 @@ function Sidebar({ activeView, setActiveView, counts, sidebarOpen, setSidebarOpe
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-white/10">
-          <p className="text-slate text-xs font-body">AI-powered job matching</p>
-        </div>
+        {/* Gamification Widget */}
+        <GamificationWidget onClick={() => {
+          setActiveView('achievements');
+          setSidebarOpen(false);
+          if (onNavigateHome) onNavigateHome();
+        }} />
       </aside>
     </>
   );
@@ -2623,6 +2627,7 @@ export default function App() {
             {/* Page title */}
             <h2 className="font-display text-xl text-ink hidden sm:block">
               {activeView === 'all_applications' && 'Jobs'}
+              {activeView === 'achievements' && 'Progress & Achievements'}
               {activeView === 'analytics' && 'Analytics'}
               {activeView === 'followups' && 'Follow-ups'}
               {activeView === 'resumes' && 'Resume Library'}
@@ -3103,6 +3108,8 @@ export default function App() {
               )}
             </div>
           </>
+        ) : activeView === 'achievements' ? (
+          <AchievementsView />
         ) : activeView === 'analytics' ? (
           <AnalyticsView />
         ) : activeView === 'templates' ? (

@@ -106,7 +106,7 @@ Job board email formats change frequently. When emails stop parsing correctly:
 1. **Capture a real email** - Save the HTML source
 2. **Update test fixtures** - Add new email format to `conftest.py`
 3. **Run existing tests** - See what breaks
-4. **Update parser** - Modify parser in `local_app.py`
+4. **Update parser** - Modify parser in `app/parsers/`
 5. **Verify tests pass** - Ensure all tests pass with new format
 
 ## Critical Tests
@@ -125,11 +125,11 @@ When adding new features, add corresponding tests:
 ```python
 def test_new_feature():
     """Test description."""
-    from local_app import new_function
+    from app.parsers import parse_email
 
-    result = new_function("input")
+    result = parse_email("input", "2024-01-01")
 
-    assert result == "expected", "Should return expected value"
+    assert len(result) >= 0, "Should return job list"
 ```
 
 ### Best Practices

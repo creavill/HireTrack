@@ -609,6 +609,70 @@ def register_routes(app):
         else:
             return "Frontend not built! Run 'npm run build' first.", 500
 
+    @app.route("/api/health")
+    def health_check():
+        """
+        Health check endpoint for monitoring and load balancers.
+
+        Route: GET /api/health
+
+        Returns:
+            JSON with health status, timestamp, and component checks
+
+        Response format:
+            {
+                "status": "healthy" | "unhealthy",
+                "timestamp": "ISO timestamp",
+                "checks": {
+                    "database": { "status": "healthy", "job_count": N },
+                    "ai_provider": { "status": "healthy", "available_providers": [...] },
+                    "disk": { "status": "healthy", "free_gb": N.N }
+                }
+            }
+        """
+        try:
+            from app.startup import get_health_status
+            status = get_health_status()
+            http_status = 200 if status["status"] == "healthy" else 503
+            return jsonify(status), http_status
+        except Exception as e:
+            return jsonify({
+                "status": "unhealthy",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "error": str(e)
+            }), 503
+
+    @app.route("/api/health/ready")
+    def readiness_check():
+        """
+        Readiness check - is the app ready to receive traffic?
+
+        Route: GET /api/health/ready
+
+        Returns:
+            200 if ready, 503 if not
+        """
+        try:
+            # Quick check: can we access the database?
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            return jsonify({"ready": True}), 200
+        except Exception as e:
+            return jsonify({"ready": False, "error": str(e)}), 503
+
+    @app.route("/api/health/live")
+    def liveness_check():
+        """
+        Liveness check - is the app still running?
+
+        Route: GET /api/health/live
+
+        Returns:
+            200 if alive
+        """
+        return jsonify({"alive": True}), 200
+
     @app.route("/api/jobs")
     def get_jobs():
         """
@@ -1682,6 +1746,175 @@ def register_routes(app):
             "enriched": enriched_count,
             "log_file": str(log_file.name)
         })
+
+    @app.route("/api/jobs/bulk-rescore", methods=["POST"])
+    def bulk_rescore():
+        """
+        Re-score all jobs with current resume.
+
+        Route: POST /api/jobs/bulk-rescore
+
+        Use this after updating your resume to get fresh scores.
+        Will re-score ALL jobs, not just unscored ones.
+
+        Request Body (optional):
+            resume_id (int): Specific resume to use for scoring
+
+        Returns:
+            JSON with:
+            - rescored: Number of jobs re-scored
+            - total: Total jobs processed
+            - log_file: Path to log file
+
+        Raises:
+            400: If no resumes found
+        """
+        data = request.get_json() or {}
+        resume_id = data.get("resume_id")
+
+        log_file = create_operation_log("bulk_rescore")
+        write_log(log_file, "=== BULK RE-SCORE OPERATION ===")
+
+        # Get resume text
+        try:
+            if resume_id:
+                # Get specific resume
+                conn = get_db()
+                cursor = conn.execute("SELECT content FROM resume_variants WHERE resume_id = ?", (resume_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return jsonify({"error": f"Resume {resume_id} not found"}), 404
+                resume_text = row["content"]
+                conn.close()
+            else:
+                resume_text = get_combined_resume_text()
+            write_log(log_file, f"Resume text loaded ({len(resume_text)} chars)")
+        except ValueError as e:
+            write_log(log_file, f"No resumes found: {e}")
+            return jsonify({"error": str(e)}), 400
+
+        # Get all active jobs
+        conn = get_db()
+        jobs = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM jobs WHERE is_filtered = 0"
+            ).fetchall()
+        ]
+        write_log(log_file, f"Found {len(jobs)} jobs to re-score")
+
+        rescored_count = 0
+        for job in jobs:
+            try:
+                write_log(log_file, f"Re-scoring: {job['title']} at {job['company']}")
+
+                _, baseline_score, reason = ai_filter_and_score(job, resume_text)
+
+                conn.execute(
+                    "UPDATE jobs SET score = ?, baseline_score = ?, notes = ?, updated_at = ? WHERE job_id = ?",
+                    (baseline_score, baseline_score, reason, datetime.now().isoformat(), job["job_id"]),
+                )
+                conn.commit()
+                rescored_count += 1
+
+                write_log(log_file, f"  ✓ New score: {baseline_score}")
+            except Exception as e:
+                write_log(log_file, f"  ✗ Error: {str(e)}")
+                continue
+
+        conn.close()
+
+        write_log(log_file, f"=== COMPLETED: {rescored_count}/{len(jobs)} jobs re-scored ===")
+        logger.info(f"Bulk re-score complete: {rescored_count}/{len(jobs)} jobs")
+
+        return jsonify({
+            "rescored": rescored_count,
+            "total": len(jobs),
+            "log_file": str(log_file.name)
+        })
+
+    @app.route("/api/jobs/cleanup-stale", methods=["POST"])
+    def cleanup_stale_jobs():
+        """
+        Archive stale jobs that haven't been acted on.
+
+        Route: POST /api/jobs/cleanup-stale
+
+        Finds jobs that:
+        - Are still in 'new' status
+        - Are older than the specified days
+
+        Request Body (optional):
+            days (int): Age threshold in days (default: 30)
+            archive (bool): Actually archive, or just preview (default: false)
+
+        Returns:
+            JSON with:
+            - stale_count: Number of stale jobs found
+            - archived: Number of jobs archived (if archive=true)
+            - preview: List of stale jobs (if archive=false)
+        """
+        data = request.get_json() or {}
+        days_threshold = data.get("days", 30)
+        do_archive = data.get("archive", False)
+
+        cutoff_date = (datetime.now() - timedelta(days=days_threshold)).isoformat()
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # Find stale jobs
+        stale_jobs = [
+            dict(row)
+            for row in cursor.execute(
+                """
+                SELECT job_id, title, company, status, created_at, email_date
+                FROM jobs
+                WHERE status = 'new'
+                AND is_filtered = 0
+                AND (email_date < ? OR (email_date IS NULL AND created_at < ?))
+                ORDER BY email_date ASC
+                """,
+                (cutoff_date, cutoff_date)
+            ).fetchall()
+        ]
+
+        logger.info(f"Found {len(stale_jobs)} stale jobs older than {days_threshold} days")
+
+        archived_count = 0
+        if do_archive and stale_jobs:
+            # Archive the jobs by setting status to 'passed'
+            for job in stale_jobs:
+                cursor.execute(
+                    "UPDATE jobs SET status = 'passed', updated_at = ? WHERE job_id = ?",
+                    (datetime.now().isoformat(), job["job_id"])
+                )
+                archived_count += 1
+            conn.commit()
+            logger.info(f"Archived {archived_count} stale jobs")
+
+        conn.close()
+
+        result = {
+            "stale_count": len(stale_jobs),
+            "threshold_days": days_threshold,
+        }
+
+        if do_archive:
+            result["archived"] = archived_count
+        else:
+            result["preview"] = [
+                {
+                    "job_id": j["job_id"],
+                    "title": j["title"],
+                    "company": j["company"],
+                    "date": j["email_date"] or j["created_at"]
+                }
+                for j in stale_jobs[:20]  # Limit preview to 20
+            ]
+            result["message"] = f"Preview mode: {len(stale_jobs)} stale jobs found. Set archive=true to archive them."
+
+        return jsonify(result)
 
     @app.route("/api/scan-followups", methods=["POST"])
     def api_scan_followups():
@@ -5135,6 +5368,112 @@ def register_routes(app):
             return jsonify({"success": False, "error": str(e), "message": "Test failed"}), 500
 
     # ============================================================
+    # Scan History Routes
+    # ============================================================
+
+    @app.route("/api/scan-history")
+    def get_scan_history():
+        """
+        Get scan history and run statistics.
+
+        Route: GET /api/scan-history
+
+        Query Parameters:
+            limit (int): Maximum runs to return (default: 20)
+            operation (str): Filter by operation type (scan, score, enrich)
+
+        Returns:
+            JSON with:
+            - runs: List of scan run records
+            - total_runs: Total number of runs
+            - latest_scan: Most recent scan timestamp
+        """
+        limit = request.args.get("limit", 20, type=int)
+        operation = request.args.get("operation", None)
+
+        conn = get_db()
+        try:
+            # Build query
+            if operation:
+                runs = [
+                    dict(row) for row in conn.execute(
+                        """
+                        SELECT * FROM scan_runs
+                        WHERE operation_type = ?
+                        ORDER BY started_at DESC
+                        LIMIT ?
+                        """,
+                        (operation, limit)
+                    ).fetchall()
+                ]
+            else:
+                runs = [
+                    dict(row) for row in conn.execute(
+                        """
+                        SELECT * FROM scan_runs
+                        ORDER BY started_at DESC
+                        LIMIT ?
+                        """,
+                        (limit,)
+                    ).fetchall()
+                ]
+
+            # Get total count
+            total = conn.execute("SELECT COUNT(*) FROM scan_runs").fetchone()[0]
+
+            # Get latest scan
+            latest = conn.execute(
+                "SELECT started_at FROM scan_runs WHERE operation_type = 'scan' ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+
+            return jsonify({
+                "runs": runs,
+                "total_runs": total,
+                "latest_scan": latest[0] if latest else None
+            })
+
+        except Exception as e:
+            logger.error(f"Error fetching scan history: {e}")
+            return jsonify({"runs": [], "total_runs": 0, "latest_scan": None})
+        finally:
+            conn.close()
+
+    @app.route("/api/scan-history/<run_id>")
+    def get_scan_run(run_id):
+        """
+        Get details of a specific scan run.
+
+        Route: GET /api/scan-history/<run_id>
+
+        Returns:
+            JSON with full run details including log file contents
+        """
+        conn = get_db()
+        try:
+            run = conn.execute(
+                "SELECT * FROM scan_runs WHERE run_id = ?",
+                (run_id,)
+            ).fetchone()
+
+            if not run:
+                return jsonify({"error": "Run not found"}), 404
+
+            result = dict(run)
+
+            # Try to read log file if it exists
+            if result.get("log_file"):
+                log_path = LOGS_DIR / result["log_file"]
+                if log_path.exists():
+                    try:
+                        result["log_contents"] = log_path.read_text()[-50000]  # Last 50KB
+                    except Exception:
+                        result["log_contents"] = "Could not read log file"
+
+            return jsonify(result)
+        finally:
+            conn.close()
+
+    # ============================================================
     # Analytics & Export Routes
     # ============================================================
 
@@ -5900,5 +6239,51 @@ Format your response as JSON with these fields:
         except Exception as e:
             logger.error(f"Error deleting log: {e}")
             return jsonify({"error": str(e)}), 500
+
+    # ============================================================
+    # Error Tracking Routes
+    # ============================================================
+
+    @app.route("/api/errors")
+    def get_errors():
+        """
+        Get recent errors and error statistics.
+
+        Route: GET /api/errors
+
+        Query Parameters:
+            limit (int): Maximum errors to return (default: 20)
+
+        Returns:
+            JSON with:
+            - errors: List of recent error records
+            - summary: Error statistics by type, severity, operation
+        """
+        from app.alerts import get_error_tracker
+
+        limit = request.args.get("limit", 20, type=int)
+        tracker = get_error_tracker()
+
+        return jsonify({
+            "errors": tracker.get_recent_errors(limit),
+            "summary": tracker.get_error_summary()
+        })
+
+    @app.route("/api/errors/clear", methods=["POST"])
+    def clear_errors():
+        """
+        Clear error history (for testing/maintenance).
+
+        Route: POST /api/errors/clear
+
+        Returns:
+            JSON with success status
+        """
+        from app.alerts import get_error_tracker
+
+        tracker = get_error_tracker()
+        tracker.clear_errors()
+
+        return jsonify({"success": True, "message": "Error history cleared"})
 
     return app

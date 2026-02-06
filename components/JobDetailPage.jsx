@@ -23,7 +23,10 @@ import {
   AlertTriangle,
   Users,
   Archive,
-  Copy
+  Copy,
+  TrendingUp,
+  AlertCircle,
+  Award
 } from 'lucide-react';
 
 const API_BASE = '/api';
@@ -611,6 +614,165 @@ export default function JobDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Experience Requirements */}
+          {job.experience_requirements && (() => {
+            try {
+              const requirements = typeof job.experience_requirements === 'string'
+                ? JSON.parse(job.experience_requirements)
+                : job.experience_requirements;
+              if (requirements && requirements.length > 0) {
+                return (
+                  <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
+                    <div className="px-8 py-5 border-b border-warm-gray bg-warm-gray/10">
+                      <h2 className="font-display text-xl text-ink flex items-center gap-2">
+                        <Clock size={18} className="text-copper" />
+                        Experience Requirements
+                      </h2>
+                    </div>
+                    <div className="p-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {requirements.map((req, i) => (
+                          <div
+                            key={i}
+                            className="p-4 bg-warm-gray/20 border-l-4 border-l-copper rounded-r-sm"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-semibold text-ink text-sm">{req.skill}</span>
+                              <span className="text-copper font-mono font-bold">
+                                {req.years_min}{req.years_max ? `-${req.years_max}` : '+'} yrs
+                              </span>
+                            </div>
+                            {req.raw_text && (
+                              <p className="text-xs text-slate italic mt-1 leading-snug">
+                                "{req.raw_text.substring(0, 60)}..."
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            } catch (e) {
+              console.error('Failed to parse experience_requirements:', e);
+            }
+            return null;
+          })()}
+
+          {/* Fit Analysis - Pros & Gaps */}
+          {(job.fit_pros || job.fit_gaps) && (() => {
+            try {
+              const pros = job.fit_pros
+                ? (typeof job.fit_pros === 'string' ? JSON.parse(job.fit_pros) : job.fit_pros)
+                : [];
+              const gaps = job.fit_gaps
+                ? (typeof job.fit_gaps === 'string' ? JSON.parse(job.fit_gaps) : job.fit_gaps)
+                : [];
+
+              if (pros.length > 0 || gaps.length > 0) {
+                return (
+                  <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
+                    <div className="px-8 py-5 border-b border-warm-gray bg-warm-gray/10 flex items-center justify-between">
+                      <h2 className="font-display text-xl text-ink flex items-center gap-2">
+                        <TrendingUp size={18} className="text-patina" />
+                        Fit Analysis
+                      </h2>
+                      {job.fit_score && (
+                        <span className={`px-3 py-1 rounded-sm font-mono font-bold text-sm ${
+                          job.fit_score >= 70 ? 'bg-patina/20 text-patina' :
+                          job.fit_score >= 50 ? 'bg-cream/20 text-cream' :
+                          'bg-rust/20 text-rust'
+                        }`}>
+                          {job.fit_score}% Match
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Pros - Your Strengths */}
+                        {pros.length > 0 && (
+                          <div className="bg-patina/5 p-5 rounded-sm">
+                            <h3 className="text-sm font-body font-semibold text-patina uppercase tracking-wide mb-4 flex items-center gap-2">
+                              <Award size={16} />
+                              Your Strengths
+                            </h3>
+                            <div className="space-y-4">
+                              {pros.map((pro, i) => (
+                                <div key={i} className="border-l-2 border-patina pl-3">
+                                  <p className="font-semibold text-ink text-sm">{pro.title}</p>
+                                  <p className="text-sm text-slate mt-1">{pro.description}</p>
+                                  {pro.skills && pro.skills.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {pro.skills.slice(0, 5).map((skill, j) => (
+                                        <span key={j} className="px-2 py-0.5 bg-patina/20 text-patina text-xs rounded-sm">
+                                          {skill}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Gaps - Areas to Address */}
+                        {gaps.length > 0 && (
+                          <div className="bg-rust/5 p-5 rounded-sm">
+                            <h3 className="text-sm font-body font-semibold text-rust uppercase tracking-wide mb-4 flex items-center gap-2">
+                              <AlertCircle size={16} />
+                              Areas to Address
+                            </h3>
+                            <div className="space-y-4">
+                              {gaps.map((gap, i) => (
+                                <div key={i} className={`border-l-2 pl-3 ${
+                                  gap.severity === 'high' ? 'border-rust' :
+                                  gap.severity === 'medium' ? 'border-cream' : 'border-slate'
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold text-ink text-sm">{gap.title}</p>
+                                    {gap.severity && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-sm uppercase ${
+                                        gap.severity === 'high' ? 'bg-rust/20 text-rust' :
+                                        gap.severity === 'medium' ? 'bg-cream/20 text-cream' :
+                                        'bg-slate/20 text-slate'
+                                      }`}>
+                                        {gap.severity}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-slate mt-1">{gap.description}</p>
+                                  {gap.years_required && (
+                                    <p className="text-xs text-rust mt-1">
+                                      Requires {gap.years_required}+ years experience
+                                    </p>
+                                  )}
+                                  {gap.skills && gap.skills.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {gap.skills.slice(0, 5).map((skill, j) => (
+                                        <span key={j} className="px-2 py-0.5 bg-rust/20 text-rust text-xs rounded-sm">
+                                          {skill}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            } catch (e) {
+              console.error('Failed to parse fit analysis:', e);
+            }
+            return null;
+          })()}
 
           {/* Enrichment Data */}
           {enrichment?.is_enriched && (

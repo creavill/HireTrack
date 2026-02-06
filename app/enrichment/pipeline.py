@@ -2,9 +2,10 @@
 Enrichment Pipeline - Orchestrates job data enrichment
 
 This module provides the main enrichment pipeline that combines
-web search, AI extraction, salary parsing, and database updates.
+web search, AI extraction, salary parsing, job analysis, and database updates.
 """
 
+import json
 import logging
 import sqlite3
 from datetime import datetime
@@ -12,6 +13,7 @@ from typing import Dict, Any, Optional
 
 from app.database import DB_PATH, get_db
 from app.ai import get_provider
+from app.ai.job_analyzer import extract_experience_requirements, analyze_job_fit
 from app.filters.salary_filter import (
     parse_salary_string,
     normalize_salary_range,
@@ -257,6 +259,53 @@ def enrich_job_data(
             update_values["enrichment_source"] = source_url
             result["source_url"] = source_url
             enriched_fields.append("enrichment_source")
+
+        # Analyze job requirements and fit (if we have a description)
+        if description and len(description) > 100:
+            try:
+                # Get resume text for comparison
+                from app.resume import get_combined_resume_text
+
+                resume_text = get_combined_resume_text()
+
+                if resume_text:
+                    # Extract experience requirements
+                    exp_requirements = extract_experience_requirements(description)
+                    if exp_requirements:
+                        update_values["experience_requirements"] = json.dumps(exp_requirements)
+                        enriched_fields.append("experience_requirements")
+                        result["experience_requirements"] = exp_requirements
+
+                    # Analyze job fit (pros/gaps)
+                    fit_analysis = analyze_job_fit(
+                        job_description=description,
+                        resume_text=resume_text,
+                        job_title=title,
+                        experience_requirements=exp_requirements,
+                    )
+
+                    if fit_analysis.get("pros"):
+                        update_values["fit_pros"] = json.dumps(fit_analysis["pros"])
+                        enriched_fields.append("fit_pros")
+                        result["fit_pros"] = fit_analysis["pros"]
+
+                    if fit_analysis.get("gaps"):
+                        update_values["fit_gaps"] = json.dumps(fit_analysis["gaps"])
+                        enriched_fields.append("fit_gaps")
+                        result["fit_gaps"] = fit_analysis["gaps"]
+
+                    if fit_analysis.get("match_score"):
+                        update_values["fit_score"] = fit_analysis["match_score"]
+                        enriched_fields.append("fit_score")
+                        result["fit_score"] = fit_analysis["match_score"]
+
+                    logger.info(
+                        f"Job analysis complete: {len(exp_requirements)} requirements, "
+                        f"{len(fit_analysis.get('pros', []))} pros, "
+                        f"{len(fit_analysis.get('gaps', []))} gaps"
+                    )
+            except Exception as e:
+                logger.warning(f"Job analysis failed (non-critical): {e}")
 
         # Update database
         if enriched_fields:

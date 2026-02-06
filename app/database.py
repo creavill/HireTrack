@@ -329,6 +329,14 @@ def run_migrations(conn):
         logger.info("Migrating database: adding 'archive_reason' column to jobs...")
         conn.execute("ALTER TABLE jobs ADD COLUMN archive_reason TEXT")
 
+    # Migration: Add job analysis columns for experience requirements and fit analysis
+    if "experience_requirements" not in jobs_columns:
+        logger.info("Migrating database: adding job analysis columns...")
+        conn.execute("ALTER TABLE jobs ADD COLUMN experience_requirements TEXT")  # JSON
+        conn.execute("ALTER TABLE jobs ADD COLUMN fit_pros TEXT")  # JSON
+        conn.execute("ALTER TABLE jobs ADD COLUMN fit_gaps TEXT")  # JSON
+        conn.execute("ALTER TABLE jobs ADD COLUMN fit_score INTEGER")
+
     # Migration: Create enhanced scan_runs table for comprehensive scan history
     try:
         conn.execute("""

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Search, RefreshCw, FileText, ExternalLink, ChevronDown, Filter, Briefcase, CheckCircle, XCircle, Clock, Star, Plus, Mail, Phone, User, Upload, Edit2, Trash2, Sparkles, AlertCircle, Menu, X, Settings, Building2, FileStack, Map, BarChart3, Archive, Download, Copy, FileDown } from 'lucide-react';
+import { Search, RefreshCw, FileText, ExternalLink, ChevronDown, ChevronUp, Filter, Briefcase, CheckCircle, XCircle, Clock, Star, Plus, Mail, Phone, User, Upload, Edit2, Trash2, Sparkles, AlertCircle, Menu, X, Settings, Building2, FileStack, Map, BarChart3, Archive, Download, Copy, FileDown, HelpCircle, ArrowUpDown } from 'lucide-react';
 import JobRow from './components/JobRow.jsx';
 import JobDetailPage from './components/JobDetailPage.jsx';
 import ActionBanner from './components/ActionBanner.jsx';
@@ -8,11 +8,11 @@ import AIProviderSettings from './components/AIProviderSettings.jsx';
 import EmailSourcesSettings from './components/EmailSourcesSettings.jsx';
 
 // Sidebar component for vertical navigation
-function Sidebar({ activeView, setActiveView, counts, sidebarOpen, setSidebarOpen }) {
+function Sidebar({ activeView, setActiveView, counts, sidebarOpen, setSidebarOpen, onNavigateHome }) {
   const navItems = [
     { id: 'all_applications', label: 'Jobs', icon: Briefcase, count: counts.jobs },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, count: null },
-    { id: 'followups', label: 'Follow-ups', icon: Mail, count: null },
+    { id: 'followups', label: 'Follow-ups', icon: Mail, count: counts.followups },
     { id: 'resumes', label: 'Resumes', icon: FileStack, count: counts.resumes },
     { id: 'templates', label: 'Templates', icon: FileText, count: null },
     { id: 'companies', label: 'Companies', icon: Building2, count: counts.companies },
@@ -59,6 +59,8 @@ function Sidebar({ activeView, setActiveView, counts, sidebarOpen, setSidebarOpe
                 onClick={() => {
                   setActiveView(item.id);
                   setSidebarOpen(false);
+                  // Navigate to home to close any open job detail pages
+                  if (onNavigateHome) onNavigateHome();
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 mb-1 font-body uppercase tracking-wider text-sm transition-colors ${
                   isActive
@@ -84,6 +86,238 @@ function Sidebar({ activeView, setActiveView, counts, sidebarOpen, setSidebarOpe
         </div>
       </aside>
     </>
+  );
+}
+
+// Help Modal Component - explains how everything works
+function HelpModal({ isOpen, onClose }) {
+  if (!isOpen) return null;
+
+  const sections = [
+    {
+      title: 'Getting Started',
+      icon: '1',
+      content: [
+        'Add at least one resume in the Resumes tab',
+        'Configure your job preferences in Settings (location, salary, seniority)',
+        'Click "Process Emails" to scan your Gmail for job alerts',
+      ],
+    },
+    {
+      title: 'How Scanning Works',
+      icon: '2',
+      content: [
+        'Phase 1: Scans Gmail for job alert emails (LinkedIn, Indeed, Greenhouse, etc.)',
+        'Phase 2: Filters jobs by your location and seniority preferences',
+        'Phase 3: Enriches jobs with web search data (full description, salary)',
+        'Phase 4: AI scores each job against your resume (1-100)',
+        'Phase 5: Stores follow-up emails (confirmations, rejections, interviews)',
+      ],
+    },
+    {
+      title: 'Job Scores',
+      icon: '3',
+      content: [
+        '85-100: Excellent match - apply ASAP',
+        '70-84: Good match - worth considering',
+        '50-69: Moderate match - review carefully',
+        'Below 50: Weak match - likely filtered',
+      ],
+    },
+    {
+      title: 'Status Workflow',
+      icon: '4',
+      content: [
+        'New → Interested → Applied → Interviewing → Offer/Rejected',
+        'Use "Pass" to archive jobs you\'re not interested in',
+        'Jobs are enriched exactly once to save API costs',
+      ],
+    },
+    {
+      title: 'Tips',
+      icon: '5',
+      content: [
+        'The sparkle icon (✨) means a job has enriched data',
+        'Check the Follow-ups tab for application confirmations and rejections',
+        'Use keyboard shortcuts: j/k to navigate, Enter to open, ? for help',
+      ],
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-parchment border border-warm-gray shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-parchment border-b border-warm-gray p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <HelpCircle size={24} className="text-copper" />
+            <h2 className="font-display text-xl text-ink">How Hammy Works</h2>
+          </div>
+          <button onClick={onClose} className="p-1 text-slate hover:text-ink">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {sections.map((section, idx) => (
+            <div key={idx} className="border-l-[3px] border-copper pl-4">
+              <h3 className="font-body font-semibold text-ink uppercase tracking-wide text-sm mb-2 flex items-center gap-2">
+                <span className="w-6 h-6 bg-copper text-parchment rounded-full flex items-center justify-center text-xs font-bold">
+                  {section.icon}
+                </span>
+                {section.title}
+              </h3>
+              <ul className="space-y-1">
+                {section.content.map((item, i) => (
+                  <li key={i} className="text-sm text-slate flex items-start gap-2">
+                    <span className="text-copper mt-1">•</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="sticky bottom-0 bg-parchment border-t border-warm-gray p-4">
+          <button
+            onClick={onClose}
+            className="w-full py-2 bg-copper text-parchment font-body uppercase tracking-wide text-sm hover:bg-copper/90 transition-colors"
+          >
+            Got it!
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Resume Required Modal - shown when trying to scan without resumes
+function ResumeRequiredModal({ isOpen, onClose, onGoToResumes }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-parchment border border-warm-gray shadow-xl max-w-md w-full">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-rust/10 rounded-full flex items-center justify-center">
+              <AlertCircle size={24} className="text-rust" />
+            </div>
+            <div>
+              <h2 className="font-display text-xl text-ink">Resume Required</h2>
+              <p className="text-sm text-slate">Add a resume before scanning</p>
+            </div>
+          </div>
+
+          <p className="text-slate text-sm mb-6">
+            Hammy needs at least one resume to score jobs against your qualifications.
+            Without a resume, job matching won't work properly.
+          </p>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 border border-warm-gray text-slate font-body uppercase tracking-wide text-sm hover:border-copper hover:text-ink transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onGoToResumes}
+              className="flex-1 py-2 bg-copper text-parchment font-body uppercase tracking-wide text-sm hover:bg-copper/90 transition-colors"
+            >
+              Add Resume
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Processing Progress Modal - shows scan progress
+function ProcessingModal({ isOpen, phase, stats }) {
+  if (!isOpen) return null;
+
+  const phases = [
+    { id: 1, name: 'Scanning Emails', icon: Mail },
+    { id: 2, name: 'Filtering Jobs', icon: Filter },
+    { id: 3, name: 'Enriching Data', icon: Search },
+    { id: 4, name: 'AI Scoring', icon: Sparkles },
+    { id: 5, name: 'Storing Follow-ups', icon: CheckCircle },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-parchment border border-warm-gray shadow-xl max-w-md w-full">
+        <div className="p-6">
+          <div className="flex items-center justify-center mb-6">
+            <RefreshCw size={40} className="animate-spin text-copper" />
+          </div>
+
+          <h2 className="font-display text-xl text-ink text-center mb-2">Processing Emails</h2>
+          <p className="text-sm text-slate text-center mb-6">
+            Please wait while Hammy scans and analyzes your job alerts...
+          </p>
+
+          <div className="space-y-3">
+            {phases.map((p) => {
+              const Icon = p.icon;
+              const isActive = phase === p.id;
+              const isComplete = phase > p.id;
+
+              return (
+                <div
+                  key={p.id}
+                  className={`flex items-center gap-3 p-2 rounded ${
+                    isActive ? 'bg-copper/10' : ''
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      isComplete
+                        ? 'bg-patina text-parchment'
+                        : isActive
+                        ? 'bg-copper text-parchment'
+                        : 'bg-warm-gray text-slate'
+                    }`}
+                  >
+                    {isComplete ? <CheckCircle size={16} /> : <Icon size={16} />}
+                  </div>
+                  <span
+                    className={`text-sm font-body ${
+                      isComplete ? 'text-patina' : isActive ? 'text-ink font-medium' : 'text-slate'
+                    }`}
+                  >
+                    {p.name}
+                    {isActive && '...'}
+                  </span>
+                  {isActive && (
+                    <RefreshCw size={14} className="animate-spin text-copper ml-auto" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {stats && (
+            <div className="mt-6 pt-4 border-t border-warm-gray grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-lg font-mono font-bold text-ink">{stats.jobs || 0}</div>
+                <div className="text-xs text-slate uppercase">Jobs Found</div>
+              </div>
+              <div>
+                <div className="text-lg font-mono font-bold text-ink">{stats.enriched || 0}</div>
+                <div className="text-xs text-slate uppercase">Enriched</div>
+              </div>
+              <div>
+                <div className="text-lg font-mono font-bold text-ink">{stats.scored || 0}</div>
+                <div className="text-xs text-slate uppercase">Scored</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1480,6 +1714,16 @@ export default function App() {
   const [debugScanning, setDebugScanning] = useState(false);
   const [debugResults, setDebugResults] = useState(null);
 
+  // Modal states
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showResumeRequired, setShowResumeRequired] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState(0);
+  const [processingStats, setProcessingStats] = useState(null);
+  const [followups, setFollowups] = useState([]);
+  const [followupStats, setFollowupStats] = useState({ total: 0, interviews: 0, rejections: 0, offers: 0, assessments: 0 });
+  const [followupsLoading, setFollowupsLoading] = useState(false);
+  const [scanningFollowups, setScanningFollowups] = useState(false);
+
   // Update HTML element and localStorage when dark mode changes
   useEffect(() => {
     if (darkMode) {
@@ -1626,6 +1870,37 @@ export default function App() {
     }
   }, []);
 
+  const fetchFollowups = useCallback(async () => {
+    console.log('[Frontend] Fetching followups...');
+    setFollowupsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/followups`);
+      const data = await res.json();
+      console.log(`[Frontend] Received ${data.followups?.length || 0} followups`);
+      setFollowups(data.followups || []);
+      setFollowupStats(data.stats || { total: 0, interviews: 0, rejections: 0, offers: 0, assessments: 0 });
+    } catch (err) {
+      console.error('[Frontend] Failed to fetch followups:', err);
+    } finally {
+      setFollowupsLoading(false);
+    }
+  }, []);
+
+  const handleScanFollowups = async () => {
+    setScanningFollowups(true);
+    try {
+      const res = await fetch(`${API_BASE}/scan-followups`, { method: 'POST' });
+      const data = await res.json();
+      console.log('[Frontend] Scan followups result:', data);
+      // Refresh followups after scan
+      await fetchFollowups();
+    } catch (err) {
+      console.error('[Frontend] Scan followups failed:', err);
+    } finally {
+      setScanningFollowups(false);
+    }
+  };
+
   useEffect(() => {
     console.log('[Frontend] Component mounted, fetching initial data...');
     fetchJobs();
@@ -1633,7 +1908,8 @@ export default function App() {
     fetchResumes();
     fetchTrackedCompanies();
     fetchCustomEmailSources();
-  }, [fetchJobs, fetchExternalApps, fetchResumes, fetchTrackedCompanies, fetchCustomEmailSources]);
+    fetchFollowups();
+  }, [fetchJobs, fetchExternalApps, fetchResumes, fetchTrackedCompanies, fetchCustomEmailSources, fetchFollowups]);
 
   // Separate effect for polling to avoid recreating interval
   useEffect(() => {
@@ -1652,14 +1928,42 @@ export default function App() {
 
   // UNIFIED: Scan + Enrich + Score all in one
   const handleProcessEmails = async () => {
+    // Check if user has at least one resume
+    if (resumes.length === 0) {
+      setShowResumeRequired(true);
+      return;
+    }
+
     setScanning(true);
-    showToast('Processing emails (scan → enrich → score)...', 'info');
+    setProcessingPhase(1); // Start at phase 1
+    setProcessingStats(null);
+
     try {
+      // Simulate phase progression for better UX
+      // In reality, we don't get real-time updates from the API
+      const phaseInterval = setInterval(() => {
+        setProcessingPhase((prev) => {
+          if (prev < 5) return prev + 1;
+          return prev;
+        });
+      }, 8000); // Progress every 8 seconds
+
       const response = await fetch(`${API_BASE}/scan-and-process`, { method: 'POST' });
       const data = await response.json();
+
+      clearInterval(phaseInterval);
+      setProcessingPhase(5); // Complete
+
       if (data.error) {
         showToast(`Processing failed: ${data.error}`, 'error');
       } else {
+        // Update stats for the modal
+        setProcessingStats({
+          jobs: data.jobs_new || 0,
+          enriched: data.jobs_enriched || 0,
+          scored: data.jobs_scored || 0,
+        });
+
         const summary = [
           data.jobs_new > 0 ? `${data.jobs_new} new jobs` : null,
           data.jobs_enriched > 0 ? `${data.jobs_enriched} enriched` : null,
@@ -1678,6 +1982,7 @@ export default function App() {
       showToast('Processing failed. Check console for details.', 'error');
     }
     setScanning(false);
+    setProcessingPhase(0);
   };
 
   // Legacy scan (for backwards compatibility)
@@ -2088,7 +2393,13 @@ export default function App() {
     jobs: allApplications.length,
     resumes: resumes.length,
     companies: trackedCompanies.length,
+    followups: followupStats.total || followups.length,
   };
+
+  // Navigate to home (closes job detail page)
+  const navigateHome = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
 
   return (
     <div className="min-h-screen flex">
@@ -2099,6 +2410,7 @@ export default function App() {
         counts={sidebarCounts}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
+        onNavigateHome={navigateHome}
       />
 
       {/* Main content area */}
@@ -2125,8 +2437,18 @@ export default function App() {
               {activeView === 'settings' && 'Settings'}
             </h2>
 
-            {/* Actions - Simplified to one main button */}
+            {/* Actions with help button */}
             <div className="flex items-center gap-2 ml-auto">
+              {/* Help button */}
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="p-2 text-slate hover:text-copper transition-colors"
+                title="How to use Hammy"
+              >
+                <HelpCircle size={20} />
+              </button>
+
+              {/* Process button */}
               <button
                 onClick={handleProcessEmails}
                 disabled={scanning}
@@ -2370,13 +2692,195 @@ export default function App() {
           </>
         ) : activeView === 'followups' ? (
           <>
-            {/* Follow-ups View - Placeholder */}
-            <div className="bg-warm-gray/50 border border-warm-gray rounded-sm p-8 text-center">
-              <Mail size={48} className="mx-auto mb-4 text-slate" />
-              <h3 className="font-display text-xl text-ink mb-2">Follow-ups Coming Soon</h3>
-              <p className="font-body text-slate">
-                Track interview responses, offer letters, and other follow-up emails in one place.
-              </p>
+            {/* Follow-ups View */}
+            <div className="space-y-6">
+              {/* Header with scan button */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h2 className="font-display text-xl text-ink">Follow-ups</h2>
+                  <p className="font-body text-sm text-slate mt-1">
+                    Track interview responses, rejections, and application confirmations
+                  </p>
+                </div>
+                <button
+                  onClick={handleScanFollowups}
+                  disabled={scanningFollowups}
+                  className="flex items-center gap-2 px-4 py-2 bg-copper text-parchment rounded-none uppercase tracking-wide text-sm font-body font-semibold hover:bg-copper/90 active:translate-y-px transition-all disabled:opacity-50"
+                >
+                  {scanningFollowups ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Scanning...
+                    </>
+                  ) : (
+                    <>
+                      <Mail size={16} />
+                      Scan Follow-ups
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <div className="bg-parchment border border-warm-gray p-4 rounded-sm">
+                  <div className="flex items-center gap-2 text-slate text-xs uppercase tracking-wide mb-1">
+                    <Mail size={14} />
+                    Total
+                  </div>
+                  <div className="font-mono text-2xl text-ink">{followupStats.total}</div>
+                </div>
+                <div className="bg-patina/10 border border-patina/30 p-4 rounded-sm">
+                  <div className="flex items-center gap-2 text-patina text-xs uppercase tracking-wide mb-1">
+                    <Briefcase size={14} />
+                    Interviews
+                  </div>
+                  <div className="font-mono text-2xl text-patina">{followupStats.interviews}</div>
+                </div>
+                <div className="bg-copper/10 border border-copper/30 p-4 rounded-sm">
+                  <div className="flex items-center gap-2 text-copper text-xs uppercase tracking-wide mb-1">
+                    <Star size={14} />
+                    Offers
+                  </div>
+                  <div className="font-mono text-2xl text-copper">{followupStats.offers}</div>
+                </div>
+                <div className="bg-rust/10 border border-rust/30 p-4 rounded-sm">
+                  <div className="flex items-center gap-2 text-rust text-xs uppercase tracking-wide mb-1">
+                    <XCircle size={14} />
+                    Rejections
+                  </div>
+                  <div className="font-mono text-2xl text-rust">{followupStats.rejections}</div>
+                </div>
+                <div className="bg-cream/10 border border-cream/30 p-4 rounded-sm">
+                  <div className="flex items-center gap-2 text-ink text-xs uppercase tracking-wide mb-1">
+                    <FileText size={14} />
+                    Assessments
+                  </div>
+                  <div className="font-mono text-2xl text-ink">{followupStats.assessments}</div>
+                </div>
+              </div>
+
+              {/* Follow-ups List */}
+              {followupsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw size={24} className="animate-spin text-copper" />
+                </div>
+              ) : followups.length === 0 ? (
+                <div className="bg-parchment border border-warm-gray rounded-sm p-12 text-center">
+                  <Mail size={48} className="mx-auto mb-4 text-slate opacity-50" />
+                  <h3 className="font-display text-xl text-ink mb-2">No Follow-ups Yet</h3>
+                  <p className="font-body text-slate mb-6">
+                    Click "Scan Follow-ups" to check your Gmail for application responses,
+                    interview invitations, and other follow-up emails.
+                  </p>
+                  <button
+                    onClick={handleScanFollowups}
+                    disabled={scanningFollowups}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-copper text-parchment rounded-none uppercase tracking-wide text-sm font-body font-semibold hover:bg-copper/90 active:translate-y-px transition-all disabled:opacity-50"
+                  >
+                    <Mail size={18} />
+                    Scan Follow-ups
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Group followups by company */}
+                  {Object.entries(
+                    followups.reduce((acc, f) => {
+                      const company = f.company || 'Unknown Company';
+                      if (!acc[company]) acc[company] = [];
+                      acc[company].push(f);
+                      return acc;
+                    }, {})
+                  )
+                    .sort(([, a], [, b]) => {
+                      // Sort by most recent email date
+                      const dateA = new Date(a[0]?.email_date || 0);
+                      const dateB = new Date(b[0]?.email_date || 0);
+                      return dateB - dateA;
+                    })
+                    .map(([company, companyFollowups]) => (
+                      <div key={company} className="bg-parchment border border-warm-gray rounded-sm overflow-hidden">
+                        {/* Company Header */}
+                        <div className="px-5 py-4 bg-warm-gray/20 border-b border-warm-gray flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Building2 size={18} className="text-copper" />
+                            <h3 className="font-body font-semibold text-ink">{company}</h3>
+                            <span className="text-xs text-slate bg-warm-gray/50 px-2 py-0.5 rounded-sm">
+                              {companyFollowups.length} email{companyFollowups.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          {companyFollowups[0]?.job_title && (
+                            <span className="text-sm text-slate">{companyFollowups[0].job_title}</span>
+                          )}
+                        </div>
+
+                        {/* Company's Follow-up Emails */}
+                        <div className="divide-y divide-warm-gray">
+                          {companyFollowups
+                            .sort((a, b) => new Date(b.email_date) - new Date(a.email_date))
+                            .map((followup) => (
+                              <div
+                                key={followup.id}
+                                className={`p-5 hover:bg-warm-gray/10 transition-colors border-l-4 ${
+                                  followup.type === 'interview' ? 'border-l-patina' :
+                                  followup.type === 'offer' ? 'border-l-copper' :
+                                  followup.type === 'rejection' ? 'border-l-rust' :
+                                  followup.type === 'assessment' ? 'border-l-cream' :
+                                  'border-l-slate'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className={`text-xs px-2 py-1 rounded-sm font-medium uppercase tracking-wide ${
+                                        followup.type === 'interview' ? 'bg-patina/15 text-patina' :
+                                        followup.type === 'offer' ? 'bg-copper/15 text-copper' :
+                                        followup.type === 'rejection' ? 'bg-rust/15 text-rust' :
+                                        followup.type === 'assessment' ? 'bg-cream/15 text-ink' :
+                                        'bg-slate/15 text-slate'
+                                      }`}>
+                                        {followup.type || 'update'}
+                                      </span>
+                                      <span className="text-xs text-slate">
+                                        {followup.email_date ? new Date(followup.email_date).toLocaleDateString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          year: 'numeric'
+                                        }) : ''}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-ink font-body font-medium mb-1">
+                                      {followup.subject}
+                                    </p>
+                                    {followup.snippet && (
+                                      <p className="text-sm text-slate font-body line-clamp-2 leading-relaxed">
+                                        {followup.snippet}
+                                      </p>
+                                    )}
+                                    {followup.sender_email && (
+                                      <p className="text-xs text-slate mt-2">
+                                        From: {followup.sender_email}
+                                      </p>
+                                    )}
+                                  </div>
+                                  {followup.job_id && (
+                                    <button
+                                      onClick={() => navigate(`/jobs/${followup.job_id}`)}
+                                      className="flex-shrink-0 text-xs text-copper hover:text-copper/80 flex items-center gap-1 px-2 py-1 bg-copper/10 rounded-sm transition-colors"
+                                    >
+                                      <ExternalLink size={12} />
+                                      View Job
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           </>
         ) : activeView === 'analytics' ? (
@@ -3170,6 +3674,27 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Help Modal */}
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+
+      {/* Resume Required Modal */}
+      <ResumeRequiredModal
+        isOpen={showResumeRequired}
+        onClose={() => setShowResumeRequired(false)}
+        onGoToResumes={() => {
+          setShowResumeRequired(false);
+          setActiveView('resumes');
+          navigate('/');
+        }}
+      />
+
+      {/* Processing Progress Modal */}
+      <ProcessingModal
+        isOpen={scanning}
+        phase={processingPhase}
+        stats={processingStats}
+      />
     </div>
   );
 }

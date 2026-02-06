@@ -179,14 +179,21 @@ class BaseParser(ABC):
             if len(words) >= 4:
                 # Check for repeated phrase patterns
                 for i in range(len(words) - 3):
-                    if words[i:i+2] == words[i+2:i+4]:
+                    if words[i : i + 2] == words[i + 2 : i + 4]:
                         issues.append("duplicate_pattern_in_title")
                         break
 
         # Check for placeholder or generic titles
         generic_titles = [
-            "position", "job", "role", "opportunity", "opening",
-            "ready to interview", "new job", "job alert", "job match"
+            "position",
+            "job",
+            "role",
+            "opportunity",
+            "opening",
+            "ready to interview",
+            "new job",
+            "job alert",
+            "job match",
         ]
         if title and title.lower().strip() in generic_titles:
             issues.append("generic_title")
@@ -235,14 +242,11 @@ class BaseParser(ABC):
             return ""
 
         # Remove common prefixes
-        prefixes_to_remove = [
-            "new:", "hot:", "urgent:", "immediate:",
-            "re:", "fwd:", "fw:"
-        ]
+        prefixes_to_remove = ["new:", "hot:", "urgent:", "immediate:", "re:", "fwd:", "fw:"]
         title_lower = title.lower()
         for prefix in prefixes_to_remove:
             if title_lower.startswith(prefix):
-                title = title[len(prefix):].strip()
+                title = title[len(prefix) :].strip()
                 title_lower = title.lower()
 
         # Remove location suffixes that are duplicated
@@ -274,8 +278,10 @@ class BaseParser(ABC):
             True if jobs appear to be duplicates
         """
         # Exact match
-        if (job1.get("title", "").lower() == job2.get("title", "").lower() and
-            job1.get("company", "").lower() == job2.get("company", "").lower()):
+        if (
+            job1.get("title", "").lower() == job2.get("title", "").lower()
+            and job1.get("company", "").lower() == job2.get("company", "").lower()
+        ):
             return True
 
         # Normalize and compare

@@ -295,7 +295,9 @@ def _get_after_date(days_back: int) -> str:
             logger.info(f"=== SCAN DATE RANGE ===")
             logger.info(f"  Last scan: {last_scan[0]}")
             logger.info(f"  Looking for emails after: {after_date}")
-            logger.info(f"  NOTE: Gmail 'after:' uses date only, not time. Emails from {after_date} onward will be checked.")
+            logger.info(
+                f"  NOTE: Gmail 'after:' uses date only, not time. Emails from {after_date} onward will be checked."
+            )
             return after_date
         except Exception as e:
             logger.warning(f"Error parsing last scan date: {e}")
@@ -321,7 +323,9 @@ def _phase1_job_alerts(service, after_date: str, email_sources: list) -> Dict:
     # Log all loaded sources for debugging
     logger.info(f"Phase 1: Processing {len(email_sources)} email sources")
     for src in email_sources:
-        logger.info(f"  Source: {src['name']} | Pattern: {src.get('sender_pattern', 'N/A')} | Email: {src.get('sender_email', 'N/A')}")
+        logger.info(
+            f"  Source: {src['name']} | Pattern: {src.get('sender_pattern', 'N/A')} | Email: {src.get('sender_email', 'N/A')}"
+        )
 
     source_queries = []
     for source in email_sources:
@@ -435,7 +439,9 @@ def _phase1_job_alerts(service, after_date: str, email_sources: list) -> Dict:
                     continue
 
             # Summary for this source
-            logger.info(f"  [{source_name}] Result: {source_jobs} jobs extracted, {skipped_processed} already processed")
+            logger.info(
+                f"  [{source_name}] Result: {source_jobs} jobs extracted, {skipped_processed} already processed"
+            )
 
         except Exception as e:
             logger.error(f"Query failed for {source_name}: {e}")

@@ -859,7 +859,26 @@ def register_routes(app):
                     f"[Backend] Synced status '{data['status']}' to linked external application"
                 )
 
+                # Gamification: Track application
+                if data["status"] == "applied":
+                    try:
+                        from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                        init_gamification_tables()
+                        update_daily_progress("apply_jobs")
+                        check_achievements()
+                    except Exception as e:
+                        logger.debug(f"Gamification update failed: {e}")
+
             conn.commit()
+
+        # Gamification: Track job review
+        if "viewed" in data and data["viewed"]:
+            try:
+                from app.gamification import update_daily_progress, init_gamification_tables
+                init_gamification_tables()
+                update_daily_progress("review_jobs")
+            except Exception as e:
+                logger.debug(f"Gamification update failed: {e}")
 
         conn.close()
         return jsonify({"success": True})
@@ -1235,6 +1254,15 @@ def register_routes(app):
             f"{filtered_count} filtered, {duplicate_count} dupes, "
             f"{len(followups)} follow-ups, {scan_result['phase3_discoveries']} discoveries"
         )
+
+        # Gamification: Track scan completion
+        try:
+            from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+            init_gamification_tables()
+            update_daily_progress("scan_emails")
+            check_achievements()
+        except Exception as e:
+            logger.debug(f"Gamification update failed: {e}")
 
         return jsonify(
             {
@@ -4009,6 +4037,16 @@ def register_routes(app):
             logger.info(
                 f"[Backend] Successfully inserted external application and job: {data['title']} at {data['company']}"
             )
+
+            # Gamification: Track application
+            try:
+                from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                init_gamification_tables()
+                update_daily_progress("apply_jobs")
+                check_achievements()
+            except Exception as e:
+                logger.debug(f"Gamification update failed: {e}")
+
         except Exception as e:
             logger.error(f"❌ [Backend] Database error: {str(e)}")
             return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -5738,6 +5776,17 @@ def register_routes(app):
                 archived_count = result.rowcount
 
             conn.commit()
+
+            # Gamification: Track archives
+            if archived_count > 0:
+                try:
+                    from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                    init_gamification_tables()
+                    update_daily_progress("archive_old", archived_count)
+                    check_achievements()
+                except Exception as e:
+                    logger.debug(f"Gamification update failed: {e}")
+
             return jsonify({'success': True, 'archived_count': archived_count})
 
         except Exception as e:
@@ -5760,6 +5809,15 @@ def register_routes(app):
                 (datetime.now().isoformat(), job_id)
             )
             conn.commit()
+
+            # Gamification: Track archive
+            try:
+                from app.gamification import update_daily_progress, init_gamification_tables
+                init_gamification_tables()
+                update_daily_progress("archive_old")
+            except Exception as e:
+                logger.debug(f"Gamification update failed: {e}")
+
             return jsonify({'success': True})
         except Exception as e:
             logger.error(f"Error archiving job: {e}")
@@ -6285,5 +6343,493 @@ Format your response as JSON with these fields:
         tracker.clear_errors()
 
         return jsonify({"success": True, "message": "Error history cleared"})
+
+    # ===== GAMIFICATION ENDPOINTS =====
+
+    @app.route("/api/gamification/stats")
+    def get_gamification_stats():
+        """
+        Get user gamification stats including level, points, and streaks.
+
+        Route: GET /api/gamification/stats
+
+        Returns:
+            JSON with user stats:
+            - total_points: Total points earned
+            - level: Current level
+            - level_progress: Percentage to next level
+            - current_streak: Current activity streak in days
+            - longest_streak: Longest streak achieved
+            - daily_goals_completed: Total daily goals completed all time
+        """
+        from app.gamification import get_user_stats, init_gamification_tables
+
+        try:
+            init_gamification_tables()
+            stats = get_user_stats()
+            return jsonify(stats)
+        except Exception as e:
+            logger.error(f"Error getting gamification stats: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/gamification/achievements")
+    def get_gamification_achievements():
+        """
+        Get all achievements with unlock status.
+
+        Route: GET /api/gamification/achievements
+
+        Returns:
+            JSON with:
+            - unlocked: List of unlocked achievements
+            - locked: List of locked achievements
+            - total_unlocked: Count of unlocked
+            - total_achievements: Total achievements available
+        """
+        from app.gamification import get_achievements, init_gamification_tables
+
+        try:
+            init_gamification_tables()
+            achievements = get_achievements()
+            return jsonify(achievements)
+        except Exception as e:
+            logger.error(f"Error getting achievements: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/gamification/daily-goals")
+    def get_gamification_daily_goals():
+        """
+        Get today's daily goals and progress.
+
+        Route: GET /api/gamification/daily-goals
+
+        Query Params:
+            - date: Optional date in YYYY-MM-DD format (defaults to today)
+
+        Returns:
+            JSON array of daily goals with progress
+        """
+        from app.gamification import get_daily_goals, init_gamification_tables
+
+        try:
+            init_gamification_tables()
+            date = request.args.get("date")
+            goals = get_daily_goals(date)
+            return jsonify(goals)
+        except Exception as e:
+            logger.error(f"Error getting daily goals: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/gamification/daily-goals/<goal_type>/progress", methods=["POST"])
+    def update_daily_goal_progress(goal_type):
+        """
+        Update progress on a daily goal.
+
+        Route: POST /api/gamification/daily-goals/<goal_type>/progress
+
+        Body:
+            - increment: Amount to increment (default 1)
+
+        Returns:
+            JSON with updated goal status and any points earned
+        """
+        from app.gamification import update_daily_progress, init_gamification_tables
+
+        try:
+            init_gamification_tables()
+            data = request.get_json() or {}
+            increment = data.get("increment", 1)
+            result = update_daily_progress(goal_type, increment)
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Error updating daily goal: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/gamification/check-achievements", methods=["POST"])
+    def check_gamification_achievements():
+        """
+        Check and unlock any newly earned achievements.
+
+        Route: POST /api/gamification/check-achievements
+
+        Returns:
+            JSON with list of newly unlocked achievements
+        """
+        from app.gamification import check_achievements, init_gamification_tables
+
+        try:
+            init_gamification_tables()
+            newly_unlocked = check_achievements()
+            return jsonify({
+                "newly_unlocked": newly_unlocked,
+                "count": len(newly_unlocked)
+            })
+        except Exception as e:
+            logger.error(f"Error checking achievements: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/dashboard/stats")
+    def get_dashboard_stats_endpoint():
+        """
+        Get comprehensive dashboard statistics.
+
+        Route: GET /api/dashboard/stats
+
+        Returns:
+            JSON with:
+            - jobs: Job counts by status, scores, unread
+            - activity: This week/today stats, response rate
+            - followups: Follow-up counts and types
+            - gamification: Level, points, streak, daily goals
+        """
+        from app.gamification import get_dashboard_stats, init_gamification_tables
+
+        try:
+            init_gamification_tables()
+            stats = get_dashboard_stats()
+            return jsonify(stats)
+        except Exception as e:
+            logger.error(f"Error getting dashboard stats: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    # ===== ARCHIVED JOBS ENDPOINTS =====
+
+    @app.route("/api/jobs/archived")
+    def get_archived_jobs():
+        """
+        Get archived/passed jobs with filtering.
+
+        Route: GET /api/jobs/archived
+
+        Query Params:
+            - search: Search in title, company, location
+            - sort: Sort field (date, score, company, title)
+            - order: asc or desc (default desc)
+            - limit: Max results (default 50)
+            - offset: Pagination offset (default 0)
+            - reason: Filter by archive reason (low_quality, old, manual, no_description)
+
+        Returns:
+            JSON with archived jobs and metadata
+        """
+        conn = get_db()
+        conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
+
+        search = request.args.get("search", "")
+        sort = request.args.get("sort", "date")
+        order = request.args.get("order", "desc")
+        limit = request.args.get("limit", 50, type=int)
+        offset = request.args.get("offset", 0, type=int)
+        reason = request.args.get("reason", "")
+
+        # Build query
+        query = """
+            SELECT * FROM jobs
+            WHERE status = 'passed'
+        """
+        params = []
+
+        if search:
+            query += " AND (title LIKE ? OR company LIKE ? OR location LIKE ?)"
+            search_term = f"%{search}%"
+            params.extend([search_term, search_term, search_term])
+
+        if reason:
+            query += " AND archive_reason = ?"
+            params.append(reason)
+
+        # Sorting
+        sort_map = {
+            "date": "created_at",
+            "score": "score",
+            "company": "company",
+            "title": "title"
+        }
+        sort_field = sort_map.get(sort, "created_at")
+        order_dir = "DESC" if order.lower() == "desc" else "ASC"
+        query += f" ORDER BY {sort_field} {order_dir}"
+        query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        jobs = conn.execute(query, params).fetchall()
+
+        # Get total count
+        count_query = """
+            SELECT COUNT(*) FROM jobs
+            WHERE status = 'passed'
+        """
+        count_params = []
+        if search:
+            count_query += " AND (title LIKE ? OR company LIKE ? OR location LIKE ?)"
+            count_params.extend([f"%{search}%"] * 3)
+        if reason:
+            count_query += " AND archive_reason = ?"
+            count_params.append(reason)
+
+        total = conn.execute(count_query, count_params).fetchone()[0]
+
+        # Get archive reason breakdown
+        reasons = conn.execute("""
+            SELECT archive_reason, COUNT(*) as count
+            FROM jobs
+            WHERE status = 'passed'
+            GROUP BY archive_reason
+        """).fetchall()
+
+        conn.close()
+
+        return jsonify({
+            "jobs": jobs,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "reason_breakdown": {r["archive_reason"] or "manual": r["count"] for r in reasons}
+        })
+
+    @app.route("/api/jobs/auto-archive", methods=["POST"])
+    def auto_archive_jobs():
+        """
+        Auto-archive jobs based on criteria.
+
+        Route: POST /api/jobs/auto-archive
+
+        Body:
+            - archive_no_description: Archive jobs without descriptions (default true)
+            - archive_old_days: Archive jobs older than N days (default 14)
+            - archive_low_score: Archive jobs with score below N (optional)
+            - dry_run: If true, just return what would be archived (default false)
+
+        Returns:
+            JSON with counts and list of archived jobs
+        """
+        data = request.get_json() or {}
+        archive_no_desc = data.get("archive_no_description", True)
+        archive_old_days = data.get("archive_old_days", 14)
+        archive_low_score = data.get("archive_low_score")
+        dry_run = data.get("dry_run", False)
+
+        conn = get_db()
+        conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
+
+        archived = {
+            "no_description": [],
+            "old": [],
+            "low_score": []
+        }
+
+        # Archive jobs without descriptions
+        if archive_no_desc:
+            no_desc_jobs = conn.execute("""
+                SELECT id, title, company, status FROM jobs
+                WHERE (job_description IS NULL OR job_description = '')
+                AND status NOT IN ('passed', 'applied', 'interviewing', 'offer')
+                AND is_filtered = 0
+            """).fetchall()
+
+            for job in no_desc_jobs:
+                archived["no_description"].append(job)
+                if not dry_run:
+                    conn.execute(
+                        "UPDATE jobs SET status = 'passed', archive_reason = 'no_description' WHERE id = ?",
+                        (job["id"],)
+                    )
+
+        # Archive old jobs
+        if archive_old_days:
+            cutoff = (datetime.now() - timedelta(days=archive_old_days)).isoformat()
+            old_jobs = conn.execute("""
+                SELECT id, title, company, status, created_at FROM jobs
+                WHERE created_at < ?
+                AND status IN ('new', 'interested')
+                AND is_filtered = 0
+            """, (cutoff,)).fetchall()
+
+            for job in old_jobs:
+                archived["old"].append(job)
+                if not dry_run:
+                    conn.execute(
+                        "UPDATE jobs SET status = 'passed', archive_reason = 'old' WHERE id = ?",
+                        (job["id"],)
+                    )
+
+        # Archive low score jobs
+        if archive_low_score:
+            low_jobs = conn.execute("""
+                SELECT id, title, company, score FROM jobs
+                WHERE score > 0 AND score < ?
+                AND status IN ('new', 'interested')
+                AND is_filtered = 0
+            """, (archive_low_score,)).fetchall()
+
+            for job in low_jobs:
+                archived["low_score"].append(job)
+                if not dry_run:
+                    conn.execute(
+                        "UPDATE jobs SET status = 'passed', archive_reason = 'low_quality' WHERE id = ?",
+                        (job["id"],)
+                    )
+
+        if not dry_run:
+            conn.commit()
+
+        conn.close()
+
+        total_archived = sum(len(v) for v in archived.values())
+
+        # Gamification: Track archives (if not dry run)
+        if not dry_run and total_archived > 0:
+            try:
+                from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                init_gamification_tables()
+                update_daily_progress("archive_old", total_archived)
+                check_achievements()
+            except Exception as e:
+                logger.debug(f"Gamification update failed: {e}")
+
+        return jsonify({
+            "dry_run": dry_run,
+            "archived": archived,
+            "total_archived": total_archived,
+            "by_reason": {k: len(v) for k, v in archived.items()}
+        })
+
+    @app.route("/api/jobs/<job_id>/unarchive", methods=["POST"])
+    def unarchive_job(job_id):
+        """
+        Unarchive a job (set back to 'new' or specified status).
+
+        Route: POST /api/jobs/<job_id>/unarchive
+
+        Body:
+            - new_status: Status to set (default 'new')
+
+        Returns:
+            JSON with success status
+        """
+        data = request.get_json() or {}
+        new_status = data.get("new_status", "new")
+
+        conn = get_db()
+        conn.execute(
+            "UPDATE jobs SET status = ?, archive_reason = NULL WHERE id = ?",
+            (new_status, job_id)
+        )
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True, "job_id": job_id, "new_status": new_status})
+
+    # ===== EMAIL VERIFICATION ENDPOINT =====
+
+    @app.route("/api/emails/verify-processed")
+    def verify_processed_emails():
+        """
+        Verify which emails have been processed and identify any gaps.
+
+        Route: GET /api/emails/verify-processed
+
+        Query Params:
+            - days: Number of days to look back (default 30)
+            - source: Filter by email source
+
+        Returns:
+            JSON with:
+            - total_emails: Count of emails in date range
+            - processed_emails: Count that have been processed
+            - unprocessed_count: Count not yet processed
+            - coverage_percent: Percentage of emails processed
+            - sources: Breakdown by email source
+        """
+        days = request.args.get("days", 30, type=int)
+        source_filter = request.args.get("source", "")
+
+        conn = get_db()
+        conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
+
+        # Get processed email IDs from scan_history
+        processed = conn.execute("""
+            SELECT DISTINCT email_id, source, processed_at
+            FROM processed_emails
+            WHERE processed_at >= date('now', ?)
+        """, (f"-{days} days",)).fetchall()
+
+        processed_ids = set(p["email_id"] for p in processed)
+
+        # Get source breakdown
+        source_breakdown = {}
+        for p in processed:
+            src = p["source"] or "unknown"
+            if src not in source_breakdown:
+                source_breakdown[src] = {"processed": 0, "email_ids": []}
+            source_breakdown[src]["processed"] += 1
+            source_breakdown[src]["email_ids"].append(p["email_id"])
+
+        # Get total jobs from each source
+        jobs_by_source = conn.execute("""
+            SELECT source, COUNT(*) as count
+            FROM jobs
+            WHERE created_at >= date('now', ?)
+            GROUP BY source
+        """, (f"-{days} days",)).fetchall()
+
+        conn.close()
+
+        return jsonify({
+            "days_checked": days,
+            "processed_email_count": len(processed_ids),
+            "source_breakdown": source_breakdown,
+            "jobs_by_source": {j["source"] or "unknown": j["count"] for j in jobs_by_source},
+            "message": f"Analyzed email processing for the last {days} days"
+        })
+
+    @app.route("/api/emails/reprocess", methods=["POST"])
+    def reprocess_emails():
+        """
+        Mark specific emails for reprocessing.
+
+        Route: POST /api/emails/reprocess
+
+        Body:
+            - email_ids: List of email IDs to reprocess
+            - source: Reprocess all from a specific source
+            - days: Reprocess all from last N days
+
+        Returns:
+            JSON with count of emails marked for reprocessing
+        """
+        data = request.get_json() or {}
+        email_ids = data.get("email_ids", [])
+        source = data.get("source")
+        days = data.get("days")
+
+        conn = get_db()
+
+        deleted_count = 0
+
+        if email_ids:
+            for eid in email_ids:
+                conn.execute("DELETE FROM processed_emails WHERE email_id = ?", (eid,))
+                deleted_count += 1
+        elif source:
+            result = conn.execute(
+                "DELETE FROM processed_emails WHERE source = ?",
+                (source,)
+            )
+            deleted_count = result.rowcount
+        elif days:
+            result = conn.execute(
+                "DELETE FROM processed_emails WHERE processed_at >= date('now', ?)",
+                (f"-{days} days",)
+            )
+            deleted_count = result.rowcount
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "emails_marked_for_reprocessing": deleted_count,
+            "message": "Run a new scan to reprocess these emails"
+        })
 
     return app

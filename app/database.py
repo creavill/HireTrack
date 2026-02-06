@@ -324,6 +324,11 @@ def run_migrations(conn):
         conn.execute("ALTER TABLE followups ADD COLUMN is_read INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE followups ADD COLUMN ai_summary TEXT")
 
+    # Migration: Add archive_reason column for tracking why jobs were archived
+    if "archive_reason" not in jobs_columns:
+        logger.info("Migrating database: adding 'archive_reason' column to jobs...")
+        conn.execute("ALTER TABLE jobs ADD COLUMN archive_reason TEXT")
+
     # Migration: Create enhanced scan_runs table for comprehensive scan history
     try:
         conn.execute("""

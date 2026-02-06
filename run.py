@@ -23,6 +23,7 @@ sys.path.insert(0, str(APP_DIR))
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+
 load_dotenv(APP_DIR / ".env")
 
 # Initialize logging first
@@ -49,8 +50,7 @@ def main():
 
     logger.info("Running startup validation...")
     validation_passed, results = run_startup_validation(
-        strict=False,  # Allow warnings in development
-        log_results=True
+        strict=False, log_results=True  # Allow warnings in development
     )
 
     if not validation_passed:
@@ -59,11 +59,13 @@ def main():
 
     # Create the Flask app using factory
     from app import create_app
+
     app = create_app()
 
     # Get config for startup info
     try:
         from app.config import get_config
+
         config = get_config()
         user_name = config.user_name
         user_email = config.user_email
@@ -77,6 +79,7 @@ def main():
     # Automatic backup on startup (non-blocking)
     try:
         from backup_manager import backup_on_startup
+
         logger.info("Creating automatic backup...")
         backup_on_startup()
         logger.info("Backup created successfully")
@@ -86,12 +89,14 @@ def main():
     # Resume migration (non-blocking)
     try:
         from resume_manager import migrate_file_resumes_to_db
+
         migrate_file_resumes_to_db()
     except Exception as e:
         logger.debug(f"Resume migration skipped: {e}")
 
     # Startup banner
     from app.database import DB_PATH
+
     credentials_file = APP_DIR / "credentials.json"
 
     logger.info("")

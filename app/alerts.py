@@ -127,8 +127,10 @@ class ErrorTracker:
 
             # Count recent errors
             recent_errors = sum(
-                1 for e in self._errors
-                if datetime.fromisoformat(e["timestamp"].replace("Z", "")).timestamp() > window_start
+                1
+                for e in self._errors
+                if datetime.fromisoformat(e["timestamp"].replace("Z", "")).timestamp()
+                > window_start
             )
 
             if recent_errors >= self.alert_threshold:
@@ -137,8 +139,7 @@ class ErrorTracker:
     def _trigger_alert(self, error_count: int):
         """Trigger an alert for high error rate."""
         alert_message = (
-            f"HIGH ERROR RATE: {error_count} errors in last "
-            f"{self.alert_window_seconds} seconds"
+            f"HIGH ERROR RATE: {error_count} errors in last " f"{self.alert_window_seconds} seconds"
         )
         logger.critical(alert_message)
 
@@ -243,6 +244,7 @@ def track_errors(operation: str):
         def scan_emails():
             ...
     """
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             try:
@@ -254,11 +256,14 @@ def track_errors(operation: str):
                     operation=operation,
                 )
                 raise
+
         return wrapper
+
     return decorator
 
 
 # Example alert handlers (can be extended)
+
 
 def console_alert_handler(message: str, recent_errors: List[Dict]):
     """Print alert to console (default handler)."""
@@ -280,7 +285,9 @@ def file_alert_handler(message: str, recent_errors: List[Dict]):
         f.write(f"[{timestamp}] ALERT: {message}\n")
         f.write(f"{'='*60}\n")
         for error in recent_errors[-5:]:
-            f.write(f"  - {error['timestamp']}: {error['error_type']}: {error['error_message'][:100]}\n")
+            f.write(
+                f"  - {error['timestamp']}: {error['error_type']}: {error['error_message'][:100]}\n"
+            )
         f.write(f"{'='*60}\n")
 
 

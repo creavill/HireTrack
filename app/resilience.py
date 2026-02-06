@@ -52,6 +52,7 @@ def retry_with_backoff(
         def flaky_api_call():
             ...
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -68,15 +69,11 @@ def retry_with_backoff(
                             f"All {max_retries} retries exhausted for {func.__name__}: {e}"
                         )
                         raise RetryError(
-                            f"Failed after {max_retries} retries: {e}",
-                            last_exception=e
+                            f"Failed after {max_retries} retries: {e}", last_exception=e
                         )
 
                     # Calculate delay with exponential backoff
-                    delay = min(
-                        base_delay * (exponential_base ** attempt),
-                        max_delay
-                    )
+                    delay = min(base_delay * (exponential_base**attempt), max_delay)
 
                     # Add jitter (±25% of delay)
                     if jitter:
@@ -92,12 +89,10 @@ def retry_with_backoff(
 
                     time.sleep(delay)
 
-            raise RetryError(
-                f"Failed after {max_retries} retries",
-                last_exception=last_exception
-            )
+            raise RetryError(f"Failed after {max_retries} retries", last_exception=last_exception)
 
         return wrapper
+
     return decorator
 
 
@@ -185,10 +180,12 @@ class RateLimiter:
 
     def __call__(self, func: Callable) -> Callable:
         """Use as decorator."""
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             self.acquire()
             return func(*args, **kwargs)
+
         return wrapper
 
 
@@ -236,8 +233,10 @@ class CircuitBreaker:
         with self._lock:
             if self._state == self.OPEN:
                 # Check if recovery timeout has passed
-                if self._last_failure_time and \
-                   time.time() - self._last_failure_time >= self.recovery_timeout:
+                if (
+                    self._last_failure_time
+                    and time.time() - self._last_failure_time >= self.recovery_timeout
+                ):
                     self._state = self.HALF_OPEN
                     self._success_count = 0
             return self._state
@@ -263,21 +262,17 @@ class CircuitBreaker:
             if self._state == self.HALF_OPEN:
                 self._state = self.OPEN
                 logger.warning("Circuit breaker re-opened after failure in half-open state")
-            elif self._state == self.CLOSED and \
-                 self._failure_count >= self.failure_threshold:
+            elif self._state == self.CLOSED and self._failure_count >= self.failure_threshold:
                 self._state = self.OPEN
-                logger.warning(
-                    f"Circuit breaker opened after {self._failure_count} failures"
-                )
+                logger.warning(f"Circuit breaker opened after {self._failure_count} failures")
 
     def __call__(self, func: Callable) -> Callable:
         """Use as decorator."""
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             if self.state == self.OPEN:
-                raise RetryError(
-                    "Circuit breaker is open - service temporarily unavailable"
-                )
+                raise RetryError("Circuit breaker is open - service temporarily unavailable")
 
             try:
                 result = func(*args, **kwargs)
@@ -316,7 +311,7 @@ def resilient_call(
     *args,
     max_retries: int = 3,
     rate_limiter: Optional[RateLimiter] = None,
-    **kwargs
+    **kwargs,
 ) -> Any:
     """
     Make a resilient API call with retry and rate limiting.

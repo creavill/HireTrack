@@ -54,10 +54,10 @@ class ConsoleFormatter(logging.Formatter):
     """Colored console formatter for development."""
 
     COLORS = {
-        "DEBUG": "\033[36m",     # Cyan
-        "INFO": "\033[32m",      # Green
-        "WARNING": "\033[33m",   # Yellow
-        "ERROR": "\033[31m",     # Red
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
         "CRITICAL": "\033[35m",  # Magenta
     }
     RESET = "\033[0m"
@@ -183,7 +183,9 @@ class OperationLogger:
     def __init__(self, operation_type: str):
         self.operation_type = operation_type
         self.start_time = datetime.now()
-        self.log_file = LOGS_DIR / f"{operation_type}_{self.start_time.strftime('%Y%m%d_%H%M%S')}.log"
+        self.log_file = (
+            LOGS_DIR / f"{operation_type}_{self.start_time.strftime('%Y%m%d_%H%M%S')}.log"
+        )
         self.logger = get_logger(f"operation.{operation_type}")
         self.entries = []
 
@@ -193,7 +195,7 @@ class OperationLogger:
             "timestamp": datetime.now().isoformat(),
             "level": level,
             "message": message,
-            **data
+            **data,
         }
         self.entries.append(entry)
 

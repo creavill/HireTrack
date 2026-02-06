@@ -53,7 +53,7 @@ def ai_filter_and_score(job: Dict, resume_text: str) -> Tuple[bool, int, str]:
         retryable_exceptions=AI_RETRYABLE_EXCEPTIONS,
         on_retry=lambda e, attempt: logger.warning(
             f"Retry {attempt}/3 for filter_and_score on job '{job.get('title', 'unknown')}': {e}"
-        )
+        ),
     )
     def _call_with_retry():
         APIRateLimiters.claude.acquire(timeout=30)
@@ -86,13 +86,14 @@ def analyze_job(job: Dict, resume_text: str) -> Dict:
     Returns:
         Analysis dictionary with score, strengths, gaps, recommendation
     """
+
     @retry_with_backoff(
         max_retries=3,
         base_delay=2.0,
         retryable_exceptions=AI_RETRYABLE_EXCEPTIONS,
         on_retry=lambda e, attempt: logger.warning(
             f"Retry {attempt}/3 for analyze_job on '{job.get('title', 'unknown')}': {e}"
-        )
+        ),
     )
     def _call_with_retry():
         APIRateLimiters.claude.acquire(timeout=30)
@@ -108,7 +109,7 @@ def analyze_job(job: Dict, resume_text: str) -> Dict:
             "strengths": ["Analysis unavailable"],
             "gaps": ["Could not analyze job"],
             "recommendation": f"Analysis failed: {e.last_exception}",
-            "error": True
+            "error": True,
         }
 
 
@@ -124,13 +125,14 @@ def generate_cover_letter(job: Dict, resume_text: str, analysis: Optional[Dict] 
     Returns:
         Cover letter text
     """
+
     @retry_with_backoff(
         max_retries=2,
         base_delay=3.0,
         retryable_exceptions=AI_RETRYABLE_EXCEPTIONS,
         on_retry=lambda e, attempt: logger.warning(
             f"Retry {attempt}/2 for generate_cover_letter: {e}"
-        )
+        ),
     )
     def _call_with_retry():
         APIRateLimiters.claude.acquire(timeout=60)
@@ -159,13 +161,14 @@ def generate_interview_answer(
     Returns:
         Generated interview answer
     """
+
     @retry_with_backoff(
         max_retries=2,
         base_delay=2.0,
         retryable_exceptions=AI_RETRYABLE_EXCEPTIONS,
         on_retry=lambda e, attempt: logger.warning(
             f"Retry {attempt}/2 for generate_interview_answer: {e}"
-        )
+        ),
     )
     def _call_with_retry():
         APIRateLimiters.claude.acquire(timeout=30)
@@ -192,13 +195,12 @@ def classify_email(subject: str, sender: str, body: str) -> Dict[str, Any]:
         Classification dict with is_job_related, classification, confidence,
         company, and summary
     """
+
     @retry_with_backoff(
         max_retries=2,
         base_delay=1.0,
         retryable_exceptions=AI_RETRYABLE_EXCEPTIONS,
-        on_retry=lambda e, attempt: logger.warning(
-            f"Retry {attempt}/2 for classify_email: {e}"
-        )
+        on_retry=lambda e, attempt: logger.warning(f"Retry {attempt}/2 for classify_email: {e}"),
     )
     def _call_with_retry():
         APIRateLimiters.claude.acquire(timeout=15)
@@ -215,7 +217,7 @@ def classify_email(subject: str, sender: str, body: str) -> Dict[str, Any]:
             "confidence": 0,
             "company": None,
             "summary": f"Classification failed: {e.last_exception}",
-            "error": True
+            "error": True,
         }
 
 
@@ -231,13 +233,14 @@ def search_job_description(company: str, title: str) -> Dict[str, Any]:
         Enrichment dict with found, description, requirements, salary_range,
         source_url, and enrichment_status
     """
+
     @retry_with_backoff(
         max_retries=2,
         base_delay=2.0,
         retryable_exceptions=AI_RETRYABLE_EXCEPTIONS,
         on_retry=lambda e, attempt: logger.warning(
             f"Retry {attempt}/2 for search_job_description: {e}"
-        )
+        ),
     )
     def _call_with_retry():
         APIRateLimiters.web_scrape.acquire(timeout=30)
@@ -255,7 +258,7 @@ def search_job_description(company: str, title: str) -> Dict[str, Any]:
             "salary_range": None,
             "source_url": None,
             "enrichment_status": "failed",
-            "error": str(e.last_exception)
+            "error": str(e.last_exception),
         }
 
 

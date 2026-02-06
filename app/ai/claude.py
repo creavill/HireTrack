@@ -204,18 +204,14 @@ If you cannot find the job posting, return:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=2000,
-                tools=[{
-                    "type": "web_search_20250305",
-                    "name": "web_search",
-                    "max_uses": 3
-                }],
-                messages=[{"role": "user", "content": search_prompt}]
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
+                messages=[{"role": "user", "content": search_prompt}],
             )
 
             # Process the response
             result_text = ""
             for block in response.content:
-                if hasattr(block, 'text'):
+                if hasattr(block, "text"):
                     result_text += block.text
 
             # Parse JSON from response

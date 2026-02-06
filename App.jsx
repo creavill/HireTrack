@@ -2558,13 +2558,29 @@ export default function App() {
       });
     });
 
-    // Sort by most recent first
+    // Sort based on filter.sort
     return combinedList.sort((a, b) => {
-      const dateA = new Date(a.sort_date || 0);
-      const dateB = new Date(b.sort_date || 0);
-      return dateB - dateA;
+      switch (filter.sort) {
+        case 'score':
+          return (b.score || 0) - (a.score || 0);
+        case 'score-low':
+          return (a.score || 0) - (b.score || 0);
+        case 'title':
+          return (a.title || '').localeCompare(b.title || '');
+        case 'title-desc':
+          return (b.title || '').localeCompare(a.title || '');
+        case 'status':
+          return (a.display_status || '').localeCompare(b.display_status || '');
+        case 'status-desc':
+          return (b.display_status || '').localeCompare(a.display_status || '');
+        case 'date-oldest':
+          return new Date(a.sort_date || 0) - new Date(b.sort_date || 0);
+        case 'date':
+        default:
+          return new Date(b.sort_date || 0) - new Date(a.sort_date || 0);
+      }
     });
-  }, [jobs, externalApps]);
+  }, [jobs, externalApps, filter.sort]);
 
   // Counts for sidebar
   const sidebarCounts = {
@@ -2712,6 +2728,8 @@ export default function App() {
                 <option value="title-desc">Title (Z-A)</option>
                 <option value="score">Score (High-Low)</option>
                 <option value="score-low">Score (Low-High)</option>
+                <option value="status">Status (A-Z)</option>
+                <option value="status-desc">Status (Z-A)</option>
               </select>
             </div>
 
@@ -2745,9 +2763,33 @@ export default function App() {
                   <div className="w-2 flex-shrink-0"></div>
                   <div className="w-10 flex-shrink-0"></div>
                   <div className="flex-1 min-w-0">Job</div>
-                  <div className="w-10 flex-shrink-0 text-center">Score</div>
-                  <div className="w-24 flex-shrink-0">Status</div>
-                  <div className="w-12 flex-shrink-0 text-right">Date</div>
+                  <button
+                    onClick={() => setFilter({ ...filter, sort: filter.sort === 'score' ? 'score-low' : 'score' })}
+                    className="w-10 flex-shrink-0 flex items-center justify-center gap-0.5 hover:text-copper transition-colors cursor-pointer"
+                  >
+                    Score
+                    {filter.sort === 'score' && <ChevronDown size={12} />}
+                    {filter.sort === 'score-low' && <ChevronUp size={12} />}
+                    {!filter.sort.startsWith('score') && <ArrowUpDown size={10} className="opacity-50" />}
+                  </button>
+                  <button
+                    onClick={() => setFilter({ ...filter, sort: filter.sort === 'status' ? 'status-desc' : 'status' })}
+                    className="w-24 flex-shrink-0 flex items-center gap-0.5 hover:text-copper transition-colors cursor-pointer"
+                  >
+                    Status
+                    {filter.sort === 'status' && <ChevronUp size={12} />}
+                    {filter.sort === 'status-desc' && <ChevronDown size={12} />}
+                    {!filter.sort.startsWith('status') && <ArrowUpDown size={10} className="opacity-50" />}
+                  </button>
+                  <button
+                    onClick={() => setFilter({ ...filter, sort: filter.sort === 'date' ? 'date-oldest' : 'date' })}
+                    className="w-12 flex-shrink-0 flex items-center justify-end gap-0.5 hover:text-copper transition-colors cursor-pointer"
+                  >
+                    Date
+                    {filter.sort === 'date' && <ChevronDown size={12} />}
+                    {filter.sort === 'date-oldest' && <ChevronUp size={12} />}
+                    {!filter.sort.startsWith('date') && <ArrowUpDown size={10} className="opacity-50" />}
+                  </button>
                   <div className="w-4 flex-shrink-0"></div>
                 </div>
 

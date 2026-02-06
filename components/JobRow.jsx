@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, ChevronRight, Mail } from 'lucide-react';
+import { MapPin, Clock, ChevronRight, Mail, FileText } from 'lucide-react';
 
 // Generate a consistent color from company name hash
 function getCompanyColor(company) {
@@ -64,6 +64,9 @@ export default function JobRow({ job, isSelected }) {
   // Activity count from followup emails
   const followupCount = job.followup_count || 0;
 
+  // Check if job has description details
+  const hasDescription = job.job_description || job.full_description;
+
   const handleClick = () => {
     navigate(`/jobs/${job.job_id}`);
   };
@@ -111,6 +114,9 @@ export default function JobRow({ job, isSelected }) {
           <h3 className="font-body font-semibold text-ink truncate text-sm">
             {job.title}
           </h3>
+          {hasDescription && (
+            <FileText size={12} className="flex-shrink-0 text-patina" title="Has job description" />
+          )}
         </div>
 
         {/* Company & Location Row */}

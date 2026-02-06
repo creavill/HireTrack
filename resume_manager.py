@@ -172,11 +172,11 @@ def get_combined_resume_text() -> str:
     in AI prompts. Allows Claude to see all resume variants and choose
     the most relevant one for each job analysis.
 
-    Falls back to file-based loading if database is empty (backward
-    compatibility with older setups).
-
     Returns:
         Combined resume text with '---' separators between variants
+
+    Raises:
+        ValueError: If no resumes are available in the database
 
     Examples:
         >>> text = get_combined_resume_text()
@@ -186,9 +186,10 @@ def get_combined_resume_text() -> str:
     resumes = load_resumes_from_db()
 
     if not resumes:
-        # Fallback to file-based loading
-        logger.warning("⚠️  No resumes in database, falling back to file-based loading...")
-        return load_resumes()
+        raise ValueError(
+            "No resumes found! Please upload at least one resume via the dashboard "
+            "before scanning emails."
+        )
 
     return "\n\n---\n\n".join([r['content'] for r in resumes])
 

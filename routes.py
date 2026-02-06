@@ -27,7 +27,6 @@ from ai_analyzer import (
 )
 from gmail_scanner import scan_emails, scan_followup_emails, get_gmail_service, get_email_body
 from resume_manager import (
-    load_resumes,
     load_resumes_from_db,
     get_combined_resume_text,
     migrate_file_resumes_to_db,
@@ -993,7 +992,7 @@ def register_routes(app):
                 "classification": fu.get("type")
             })
 
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         if not resume_text:
             write_log(log_file, "ERROR: No resumes found")
             return (
@@ -1254,7 +1253,7 @@ def register_routes(app):
                 write_log(log_file, f"  Job #{i+1}: {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}")
 
             # Load resumes for scoring
-            resume_text = load_resumes()
+            resume_text = get_combined_resume_text()
             if not resume_text:
                 write_log(log_file, "ERROR: No resumes found")
                 return jsonify({"error": "No resumes found", "log_file": str(log_file.name)}), 400
@@ -1509,7 +1508,7 @@ def register_routes(app):
             POST /api/analyze
             Response: {"analyzed": 8}
         """
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         if not resume_text:
             return jsonify({"error": "No resumes found"}), 400
 
@@ -1587,7 +1586,7 @@ def register_routes(app):
         write_log(log_file, "=== SCORE JOBS OPERATION STARTED ===")
         write_log(log_file, f"Options: enrich_first={enrich_first}, force_rescore={force_rescore}")
 
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         if not resume_text:
             write_log(log_file, "ERROR: No resumes found")
             return jsonify({"error": "No resumes found", "log_file": str(log_file.name)}), 400
@@ -1953,7 +1952,7 @@ def register_routes(app):
         Examples:
             POST /api/jobs/abc123/cover-letter
         """
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         conn = get_db()
         job = dict(conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone())
 
@@ -2181,7 +2180,7 @@ def register_routes(app):
         log("")
 
         # Load resume for scoring context
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
 
         results = []
         for idx, msg_info in enumerate(all_msg_ids):
@@ -2665,7 +2664,7 @@ def register_routes(app):
             return jsonify({"status": "updated", "job_id": job_id})
 
         # New job from extension - add with baseline score
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         baseline_score = 50  # Default
 
         if resume_text:
@@ -2746,7 +2745,7 @@ def register_routes(app):
         if not title or not description:
             return jsonify({"error": "title and description required"}), 400
 
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         if not resume_text:
             return jsonify({"error": "No resumes found"}), 400
 
@@ -2839,7 +2838,7 @@ def register_routes(app):
         jobs = fetch_wwr_jobs()
         logger.info(f"📥 Fetched {len(jobs)} jobs from RSS feeds")
 
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
 
         if not resume_text:
             return jsonify({"error": "No resumes found"}), 400
@@ -2965,7 +2964,7 @@ def register_routes(app):
         job = data.get("job", {})
         analysis = data.get("analysis", {})
 
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         if not resume_text:
             return jsonify({"error": "No resumes found"}), 400
 
@@ -3046,7 +3045,7 @@ def register_routes(app):
         if not question:
             return jsonify({"error": "Question required"}), 400
 
-        resume_text = load_resumes()
+        resume_text = get_combined_resume_text()
         if not resume_text:
             return jsonify({"error": "No resumes found"}), 400
 

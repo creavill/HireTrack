@@ -663,9 +663,9 @@ export default function JobDetailPage() {
                 {enrichment.full_description && (
                   <div className="mt-6 pt-6 border-t border-warm-gray">
                     <h3 className="text-sm font-body font-semibold text-ink uppercase tracking-wide mb-3">
-                      Full Description (Preview)
+                      Full Description
                     </h3>
-                    <p className="text-sm text-slate font-body leading-relaxed line-clamp-4">
+                    <p className="text-sm text-slate font-body leading-relaxed whitespace-pre-wrap">
                       {enrichment.full_description}
                     </p>
                   </div>

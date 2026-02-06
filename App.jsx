@@ -529,7 +529,7 @@ function JobCard({ job, onStatusChange, onGenerateCoverLetter, onRecommendResume
         </div>
 
         {analysis.recommendation && (
-          <p className="mt-2 text-sm text-slate line-clamp-2 pl-14">{analysis.recommendation}</p>
+          <p className="mt-2 text-sm text-slate pl-14">{analysis.recommendation}</p>
         )}
       </div>
 
@@ -1612,7 +1612,7 @@ function EmailTemplatesView() {
             }`}
           >
             <h3 className="font-body font-semibold text-ink mb-1">{template.name}</h3>
-            <p className="text-sm text-slate line-clamp-2">{template.subject}</p>
+            <p className="text-sm text-slate">{template.subject}</p>
           </div>
         ))}
       </div>
@@ -3032,7 +3032,7 @@ export default function App() {
                                       {followup.subject}
                                     </p>
                                     {followup.snippet && (
-                                      <p className="text-sm text-slate font-body line-clamp-2 leading-relaxed">
+                                      <p className="text-sm text-slate font-body leading-relaxed">
                                         {followup.snippet}
                                       </p>
                                     )}

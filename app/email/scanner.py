@@ -478,13 +478,16 @@ def _phase2_followups(
         f'OR subject:"schedule") after:{after_date}',
         # Rejections
         f'(subject:unfortunately OR subject:"not selected" OR subject:"other candidates" '
-        f'OR subject:"decided to pursue") after:{after_date}',
+        f'OR subject:"decided to pursue" OR subject:"unable to") after:{after_date}',
         # Offers
         f'(subject:offer OR subject:congratulations OR subject:"pleased to extend") '
         f"after:{after_date}",
         # Assessments
         f'(subject:assessment OR subject:"coding challenge" OR subject:"take-home") '
         f"after:{after_date}",
+        # Employer messages (Indeed, LinkedIn, etc.)
+        f'(subject:"new message from" OR subject:"sent you a message" '
+        f'OR subject:"message from" OR subject:"employer message") after:{after_date}',
         # Broad sweeps
         f'(subject:"your candidacy" OR subject:"your submission" '
         f'OR subject:"the position" OR subject:"the role") after:{after_date}',
@@ -893,13 +896,13 @@ def classify_followup_email(subject: str, snippet: str, body: str = "") -> str:
     and may not contain the key phrases (e.g., a rejection phrase buried in
     the middle of the email).
 
-    Classification priority: rejection > offer > assessment > interview > received > update
+    Classification priority: rejection > offer > assessment > interview > message > received > update
     Rejection is checked first because its patterns are the most specific and
     unambiguous. Interview patterns like "next steps" can appear as polite
     farewells in rejection emails.
 
     Returns:
-        Email type: 'rejection', 'offer', 'assessment', 'interview', 'received', or 'update'
+        Email type: 'rejection', 'offer', 'assessment', 'interview', 'message', 'received', or 'update'
     """
     text = (subject + " " + snippet + " " + body).lower()
 
@@ -929,6 +932,21 @@ def classify_followup_email(subject: str, snippet: str, body: str = "") -> str:
             "pursuing other applicants",
             "not be proceeding",
             "won't be proceeding",
+            # Location/remote-related rejections
+            "unable to hire",
+            "cannot hire",
+            "not hiring in your",
+            "don't hire in your",
+            "do not hire in your",
+            "unable to consider",
+            "not able to consider",
+            "not currently hiring in",
+            "unable to offer you",
+            "cannot offer you",
+            "we are unable to",
+            "we're unable to",
+            "not a fit at this time",
+            "not a match at this time",
         ]
     ):
         return "rejection"
@@ -985,6 +1003,27 @@ def classify_followup_email(subject: str, snippet: str, body: str = "") -> str:
         ]
     ):
         return "interview"
+
+    # --- Employer Message (Indeed, LinkedIn messages, recruiter outreach) ---
+    if any(
+        word in text
+        for word in [
+            "new message from",
+            "you've received a new message",
+            "you have received a new message",
+            "sent you a message",
+            "has sent you a message",
+            "employer message",
+            "message from employer",
+            "recruiter has reached out",
+            "wants to connect",
+            "is interested in your profile",
+            "viewed your profile",
+            "view message",
+            "reply to this message",
+        ]
+    ):
+        return "message"
 
     # --- Received / confirmation ---
     if any(

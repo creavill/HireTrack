@@ -21,6 +21,10 @@ from pathlib import Path
 APP_DIR = Path(__file__).parent
 sys.path.insert(0, str(APP_DIR))
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv(APP_DIR / ".env")
+
 # Initialize logging first
 from app.logging_config import setup_logging, get_logger
 

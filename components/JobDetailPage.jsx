@@ -477,30 +477,28 @@ export default function JobDetailPage() {
                            job.score >= 60 ? 'border-b-cream' : 'border-b-rust';
 
   return (
-    <div className="max-w-7xl mx-auto">
-      {/* Back button */}
-      <button
-        onClick={() => navigate('/')}
-        className="flex items-center gap-2 text-slate hover:text-copper transition-colors mb-8"
-      >
-        <ArrowLeft size={20} />
-        <span className="font-body uppercase tracking-wide text-sm">Back to Jobs</span>
-      </button>
-
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Job Info (2/3 width on large screens) */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Job Header Card */}
-          <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
-            <div className="p-8">
-              <div className="flex items-start gap-6">
+    <div className="w-full">
+      {/* Sticky Action Bar */}
+      <div className="sticky top-0 z-10 bg-parchment border-b border-warm-gray shadow-sm mb-6">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            {/* Left: Back + Job Info */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2 text-slate hover:text-copper transition-colors"
+              >
+                <ArrowLeft size={20} />
+                <span className="font-body uppercase tracking-wide text-sm hidden sm:inline">Back</span>
+              </button>
+              <div className="h-6 w-px bg-warm-gray" />
+              <div className="flex items-center gap-3">
                 {/* Company Logo */}
                 {job.logo_url ? (
                   <img
                     src={job.logo_url}
                     alt={job.company}
-                    className="w-20 h-20 flex-shrink-0 object-contain bg-white border border-warm-gray rounded-sm"
+                    className="w-10 h-10 flex-shrink-0 object-contain bg-white border border-warm-gray rounded-sm"
                     onError={(e) => {
                       e.target.onerror = null;
                       e.target.style.display = 'none';
@@ -509,76 +507,153 @@ export default function JobDetailPage() {
                   />
                 ) : null}
                 <div
-                  className="w-20 h-20 flex-shrink-0 flex items-center justify-center rounded-sm"
+                  className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-sm"
                   style={{
                     backgroundColor: getCompanyColor(job.company),
                     display: job.logo_url ? 'none' : 'flex'
                   }}
                 >
-                  <span className="text-parchment font-body font-semibold text-2xl">
+                  <span className="text-parchment font-body font-semibold text-sm">
                     {getCompanyInitials(job.company)}
                   </span>
                 </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start gap-3 mb-2">
-                    <h1 className="font-display text-3xl text-ink leading-tight">{job.title}</h1>
-                    {job.is_aggregator && (
-                      <span className="px-2 py-1 bg-cream/20 text-cream text-xs font-semibold uppercase tracking-wide flex items-center gap-1 flex-shrink-0 mt-1">
-                        <AlertTriangle size={12} />
-                        Staffing
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xl text-slate font-body mb-3">{job.company || 'Unknown Company'}</p>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    {job.location && (
-                      <span className="flex items-center gap-1.5 text-sm text-slate bg-warm-gray/30 px-3 py-1.5 rounded-sm">
-                        <MapPin size={14} />
-                        {job.location}
-                      </span>
-                    )}
-                    {(enrichment?.salary_estimate || job.salary_estimate) && (
-                      <span className="flex items-center gap-1.5 text-sm text-patina font-semibold bg-patina/10 px-3 py-1.5 rounded-sm">
-                        <DollarSign size={14} />
-                        {enrichment?.salary_estimate || job.salary_estimate}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Score */}
-                <div className="flex-shrink-0 text-center bg-warm-gray/20 px-6 py-4 rounded-sm">
-                  <div className={`font-mono font-bold text-4xl text-ink border-b-4 ${scoreBorderColor} pb-2`}>
-                    {job.score || '—'}
-                  </div>
-                  <p className="text-xs text-slate mt-2 uppercase tracking-wide font-semibold">Match Score</p>
+                <div className="hidden md:block">
+                  <h1 className="font-display text-lg text-ink leading-tight truncate max-w-md">{job.title}</h1>
+                  <p className="text-sm text-slate">{job.company}</p>
                 </div>
               </div>
             </div>
 
-            {/* Quick Info Row */}
-            <div className="flex items-center gap-6 px-8 py-4 border-t border-warm-gray bg-warm-gray/10 text-sm text-slate">
-              <span className="flex items-center gap-1.5">
-                <Calendar size={14} />
-                Added {formatDate(job.created_at)}
-              </span>
-              {job.email_date && (
-                <span className="flex items-center gap-1.5">
-                  <Mail size={14} />
-                  Posted {formatDate(job.email_date)}
-                </span>
+            {/* Center: Score + Status */}
+            <div className="flex items-center gap-3">
+              <div className={`px-3 py-1.5 rounded-sm font-mono font-bold text-lg border-b-4 ${scoreBorderColor}`}>
+                {job.score || '—'}
+              </div>
+              <div className="w-32">
+                <StatusDropdown status={job.status} onChange={handleStatusChange} />
+              </div>
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {job.url && (
+                <a
+                  href={job.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-copper text-parchment font-body uppercase tracking-wide text-xs hover:bg-copper/90 transition-colors rounded-sm"
+                >
+                  <ExternalLink size={14} />
+                  View Original
+                </a>
               )}
-              {enrichment?.is_enriched && (
-                <span className="flex items-center gap-1.5 text-patina font-medium">
-                  <CheckCircle size={14} />
-                  Enriched
-                </span>
+              {!enrichment?.is_enriched && (
+                <button
+                  onClick={handleEnrich}
+                  disabled={enriching}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-patina text-patina font-body uppercase tracking-wide text-xs hover:bg-patina/10 disabled:opacity-50 transition-colors rounded-sm"
+                >
+                  {enriching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                  {enriching ? 'Enriching...' : 'Enrich'}
+                </button>
               )}
+              <button
+                onClick={handleRescore}
+                disabled={rescoring}
+                className="flex items-center gap-1.5 px-3 py-2 border border-cream text-cream font-body uppercase tracking-wide text-xs hover:bg-cream/10 disabled:opacity-50 transition-colors rounded-sm"
+              >
+                {rescoring ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                {rescoring ? 'Rescoring...' : 'Rescore'}
+              </button>
+              <button
+                onClick={handleArchive}
+                disabled={archiving}
+                className="flex items-center gap-1.5 px-3 py-2 border border-slate text-slate font-body uppercase tracking-wide text-xs hover:bg-slate/10 disabled:opacity-50 transition-colors rounded-sm"
+              >
+                {archiving ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-1.5 px-3 py-2 bg-rust/10 text-rust font-body uppercase tracking-wide text-xs hover:bg-rust/20 disabled:opacity-50 transition-colors rounded-sm"
+              >
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              </button>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* AI Analysis */}
+      {/* Main Content - Full Width */}
+      <div className="px-6 space-y-6">
+        {/* Job Header Card - Full Width */}
+        <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
+          <div className="p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+              {/* Left: Job Details */}
+              <div className="flex-1">
+                <div className="flex items-start gap-4 mb-4">
+                  <h1 className="font-display text-3xl text-ink leading-tight">{job.title}</h1>
+                  {job.is_aggregator && (
+                    <span className="px-2 py-1 bg-cream/20 text-cream text-xs font-semibold uppercase tracking-wide flex items-center gap-1 flex-shrink-0">
+                      <AlertTriangle size={12} />
+                      Staffing
+                    </span>
+                  )}
+                </div>
+                <p className="text-xl text-slate font-body mb-4">{job.company || 'Unknown Company'}</p>
+                <div className="flex items-center gap-4 flex-wrap">
+                  {job.location && (
+                    <span className="flex items-center gap-1.5 text-sm text-slate bg-warm-gray/30 px-3 py-1.5 rounded-sm">
+                      <MapPin size={14} />
+                      {job.location}
+                    </span>
+                  )}
+                  {(enrichment?.salary_estimate || job.salary_estimate) && (
+                    <span className="flex items-center gap-1.5 text-sm text-patina font-semibold bg-patina/10 px-3 py-1.5 rounded-sm">
+                      <DollarSign size={14} />
+                      {enrichment?.salary_estimate || job.salary_estimate}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5 text-sm text-slate">
+                    <Calendar size={14} />
+                    Added {formatDate(job.created_at)}
+                  </span>
+                  {enrichment?.is_enriched && (
+                    <span className="flex items-center gap-1.5 text-sm text-patina font-medium">
+                      <CheckCircle size={14} />
+                      Enriched
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Quick Actions */}
+              <div className="flex flex-col gap-2 lg:w-64">
+                {!job.cover_letter && (
+                  <button
+                    onClick={handleGenerateCoverLetter}
+                    disabled={coverLetterGenerating}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 border border-copper text-copper font-body uppercase tracking-wide text-xs hover:bg-copper/10 disabled:opacity-50 transition-colors rounded-sm"
+                  >
+                    {coverLetterGenerating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                    {coverLetterGenerating ? 'Generating...' : 'Generate Cover Letter'}
+                  </button>
+                )}
+                <button
+                  onClick={handleFindHiringManager}
+                  disabled={findingHM}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 border border-copper text-copper font-body uppercase tracking-wide text-xs hover:bg-copper/10 disabled:opacity-50 transition-colors rounded-sm"
+                >
+                  {findingHM ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />}
+                  {findingHM ? 'Finding...' : 'Find Hiring Manager'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tech Stack Overlap - Full Width (Most Important) */}
           {(analysis.recommendation || analysis.strengths?.length > 0 || analysis.gaps?.length > 0) && (
             <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
               <div className="px-8 py-5 border-b border-warm-gray bg-warm-gray/10">
@@ -1095,273 +1170,69 @@ export default function JobDetailPage() {
           )}
         </div>
 
-        {/* Right Column - Tracking & Timeline (1/3 width on large screens) */}
-        <div className="space-y-6">
-          {/* Status Card */}
-          <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
-            <div className="px-5 py-4 border-b border-warm-gray bg-warm-gray/10">
-              <h2 className="font-body font-semibold text-ink uppercase tracking-wide text-sm">Status</h2>
-            </div>
-            <StatusDropdown status={job.status} onChange={handleStatusChange} />
-          </div>
-
-          {/* Actions Card */}
-          <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
-            <div className="px-5 py-4 border-b border-warm-gray bg-warm-gray/10">
-              <h2 className="font-body font-semibold text-ink uppercase tracking-wide text-sm">Actions</h2>
-            </div>
-            <div className="p-5 space-y-3">
-              {job.url && (
-                <a
-                  href={job.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-copper text-parchment font-body uppercase tracking-wide text-sm hover:bg-copper/90 transition-colors rounded-sm"
-                >
-                  <ExternalLink size={16} />
-                  View Original
-                </a>
-              )}
-
-              {!job.cover_letter && (
-                <button
-                  onClick={handleGenerateCoverLetter}
-                  disabled={coverLetterGenerating}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-transparent border border-copper text-copper font-body uppercase tracking-wide text-sm hover:bg-copper/10 disabled:opacity-50 transition-colors rounded-sm"
-                >
-                  {coverLetterGenerating ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <FileText size={16} />
-                      Generate Cover Letter
-                    </>
-                  )}
-                </button>
-              )}
-
-              {!enrichment?.is_enriched && (
-                <button
-                  onClick={handleEnrich}
-                  disabled={enriching}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-transparent border border-patina text-patina font-body uppercase tracking-wide text-sm hover:bg-patina/10 disabled:opacity-50 transition-colors rounded-sm"
-                >
-                  {enriching ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Enriching...
-                    </>
-                  ) : (
-                    <>
-                      <Search size={16} />
-                      Enrich Job Data
-                    </>
-                  )}
-                </button>
-              )}
-
-              <button
-                onClick={handleFindHiringManager}
-                disabled={findingHM}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-transparent border border-copper text-copper font-body uppercase tracking-wide text-sm hover:bg-copper/10 disabled:opacity-50 transition-colors rounded-sm"
-              >
-                {findingHM ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Finding...
-                  </>
-                ) : (
-                  <>
-                    <Users size={16} />
-                    Find Hiring Manager
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={handleRescore}
-                disabled={rescoring}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-transparent border border-cream text-cream font-body uppercase tracking-wide text-sm hover:bg-cream/10 disabled:opacity-50 transition-colors rounded-sm"
-              >
-                {rescoring ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Rescoring...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={16} />
-                    Rescore Job
-                  </>
-                )}
-              </button>
-
-              <div className="pt-2 mt-2 border-t border-warm-gray space-y-3">
-                <button
-                  onClick={handleArchive}
-                  disabled={archiving}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-transparent border border-slate text-slate font-body uppercase tracking-wide text-sm hover:bg-slate/10 disabled:opacity-50 transition-colors rounded-sm"
-                >
-                  {archiving ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Archiving...
-                    </>
-                  ) : (
-                    <>
-                      <Archive size={16} />
-                      Archive Job
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-rust/10 text-rust font-body uppercase tracking-wide text-sm hover:bg-rust/20 disabled:opacity-50 transition-colors rounded-sm"
-                >
-                  {deleting ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 size={16} />
-                      Delete Job
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Hiring Manager Info Card */}
+          {/* Hiring Manager Info - Full Width */}
           {hiringManagerInfo && (
             <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
-              <div className="px-5 py-4 border-b border-warm-gray bg-warm-gray/10 flex items-center justify-between">
-                <h2 className="font-body font-semibold text-ink uppercase tracking-wide text-sm flex items-center gap-2">
-                  <Users size={14} className="text-copper" />
+              <div className="px-6 py-4 border-b border-warm-gray bg-warm-gray/10">
+                <h2 className="font-display text-xl text-ink flex items-center gap-2">
+                  <Users size={18} className="text-copper" />
                   Hiring Manager
                 </h2>
-                <button
-                  onClick={() => setHiringManagerInfo(null)}
-                  className="text-slate hover:text-ink transition-colors"
-                >
-                  <XCircle size={16} />
-                </button>
               </div>
-              <div className="p-5 space-y-5">
-                {/* Likely Titles */}
-                {hiringManagerInfo.likely_titles && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-slate uppercase tracking-wide mb-3">Likely Job Titles</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {hiringManagerInfo.likely_titles.map((title, i) => (
-                        <span key={i} className="px-3 py-1.5 bg-warm-gray/50 text-ink text-sm rounded-sm">{title}</span>
-                      ))}
+              <div className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {hiringManagerInfo.linkedin_search && (
+                    <div className="flex items-center justify-between gap-3 p-4 bg-copper/10 rounded-sm">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate uppercase tracking-wide mb-1">LinkedIn Search</p>
+                        <p className="text-sm text-ink font-medium">{hiringManagerInfo.linkedin_search}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleCopyToClipboard(hiringManagerInfo.linkedin_search)} className="p-2 text-copper hover:text-copper/80 transition-colors" title="Copy"><Copy size={16} /></button>
+                        <a href={`https://www.linkedin.com/search/results/people/?keywords=${"$"}{encodeURIComponent(hiringManagerInfo.linkedin_search)}`} target="_blank" rel="noopener noreferrer" className="p-2 text-copper hover:text-copper/80"><ExternalLink size={16} /></a>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {/* LinkedIn Search */}
-                {hiringManagerInfo.linkedin_search && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-slate uppercase tracking-wide mb-3">LinkedIn Search</h3>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 px-3 py-2 bg-warm-gray/30 text-sm text-ink rounded-sm">{hiringManagerInfo.linkedin_search}</code>
-                      <button
-                        onClick={() => handleCopyToClipboard(hiringManagerInfo.linkedin_search)}
-                        className="p-2 text-copper hover:text-copper/80 transition-colors"
-                        title="Copy"
-                      >
-                        <Copy size={16} />
-                      </button>
-                      <a
-                        href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(hiringManagerInfo.linkedin_search)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-copper hover:text-copper/80 transition-colors"
-                        title="Search on LinkedIn"
-                      >
-                        <ExternalLink size={16} />
-                      </a>
+                  )}
+                  {hiringManagerInfo.tips && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-slate uppercase tracking-wide mb-3">Tips</h3>
+                      <ul className="space-y-2 text-sm text-ink">
+                        {hiringManagerInfo.tips.map((tip, i) => (<li key={i} className="flex items-start gap-2"><span className="text-copper mt-0.5">•</span>{tip}</li>))}
+                      </ul>
                     </div>
-                  </div>
-                )}
-
-                {/* Tips */}
-                {hiringManagerInfo.tips && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-slate uppercase tracking-wide mb-3">Tips</h3>
-                    <ul className="space-y-2 text-sm text-ink">
-                      {hiringManagerInfo.tips.map((tip, i) => (
-                        <li key={i} className="flex items-start gap-2 leading-relaxed">
-                          <span className="text-copper mt-0.5">•</span>
-                          {tip}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Outreach Template */}
-                {hiringManagerInfo.outreach_template && (
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xs font-semibold text-slate uppercase tracking-wide">Outreach Template</h3>
-                      <button
-                        onClick={() => handleCopyToClipboard(hiringManagerInfo.outreach_template)}
-                        className="text-xs text-copper hover:text-copper/80 flex items-center gap-1 px-2 py-1 bg-copper/10 rounded-sm"
-                      >
-                        <Copy size={12} /> Copy
-                      </button>
+                  )}
+                  {hiringManagerInfo.outreach_template && (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xs font-semibold text-slate uppercase tracking-wide">Outreach Template</h3>
+                        <button onClick={() => handleCopyToClipboard(hiringManagerInfo.outreach_template)} className="text-xs text-copper px-2 py-1 bg-copper/10 rounded-sm"><Copy size={12} /> Copy</button>
+                      </div>
+                      <p className="px-4 py-3 bg-warm-gray/30 text-sm text-ink whitespace-pre-wrap rounded-sm">{hiringManagerInfo.outreach_template}</p>
                     </div>
-                    <p className="px-4 py-3 bg-warm-gray/30 text-sm text-ink whitespace-pre-wrap leading-relaxed rounded-sm">{hiringManagerInfo.outreach_template}</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Notes Card */}
-          <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
-            <div className="px-5 py-4 border-b border-warm-gray bg-warm-gray/10 flex items-center justify-between">
-              <h2 className="font-body font-semibold text-ink uppercase tracking-wide text-sm flex items-center gap-2">
-                <Edit2 size={14} className="text-copper" />
-                Notes
-              </h2>
-              {notesSaving && (
-                <span className="text-xs text-patina flex items-center gap-1">
-                  <Loader2 size={12} className="animate-spin" />
-                  Saving...
-                </span>
-              )}
+          {/* Bottom Row: Notes + Activity */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
+              <div className="px-6 py-4 border-b border-warm-gray bg-warm-gray/10 flex items-center justify-between">
+                <h2 className="font-display text-lg text-ink flex items-center gap-2"><Edit2 size={16} className="text-copper" />Notes</h2>
+                {notesSaving && (<span className="text-xs text-patina flex items-center gap-1"><Loader2 size={12} className="animate-spin" />Saving...</span>)}
+              </div>
+              <div className="p-6">
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={handleNotesSave} placeholder="Add notes..." className="w-full px-4 py-3 text-sm border border-warm-gray bg-warm-gray/20 text-ink font-body placeholder-slate focus:border-copper resize-none outline-none min-h-[160px] rounded-sm" />
+              </div>
             </div>
-            <div className="p-5">
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                onBlur={handleNotesSave}
-                placeholder="Add notes, interview dates, key takeaways..."
-                className="w-full px-4 py-3 text-sm border border-warm-gray bg-warm-gray/20 text-ink font-body placeholder-slate focus:border-copper focus:bg-parchment transition-colors resize-none outline-none min-h-[140px] rounded-sm leading-relaxed"
-              />
-            </div>
-          </div>
-
-          {/* Email Activity Timeline */}
-          <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
-            <div className="px-5 py-4 border-b border-warm-gray bg-warm-gray/10">
-              <h2 className="font-body font-semibold text-ink uppercase tracking-wide text-sm flex items-center gap-2">
-                <Mail size={14} className="text-copper" />
-                Email Activity
-              </h2>
-            </div>
-            <div className="p-5">
-              <ActivityTimeline activities={activities} loading={activitiesLoading} />
+            <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
+              <div className="px-6 py-4 border-b border-warm-gray bg-warm-gray/10">
+                <h2 className="font-display text-lg text-ink flex items-center gap-2"><Mail size={16} className="text-copper" />Email Activity</h2>
+              </div>
+              <div className="p-6">
+                <ActivityTimeline activities={activities} loading={activitiesLoading} />
+              </div>
             </div>
           </div>
         </div>

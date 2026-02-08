@@ -13,7 +13,12 @@ from typing import Dict, Any, Optional
 
 from app.database import DB_PATH, get_db
 from app.ai import get_provider
-from app.ai.job_analyzer import extract_experience_requirements, analyze_job_fit
+from app.ai.job_analyzer import (
+    extract_experience_requirements,
+    analyze_job_fit,
+    extract_required_skills,
+    create_tech_stack_overlap,
+)
 from app.filters.salary_filter import (
     parse_salary_string,
     normalize_salary_range,
@@ -276,6 +281,24 @@ def enrich_job_data(
                         enriched_fields.append("experience_requirements")
                         result["experience_requirements"] = exp_requirements
 
+                    # Extract required and preferred skills
+                    skills_data = extract_required_skills(description)
+                    if skills_data.get("required"):
+                        update_values["required_skills"] = json.dumps(skills_data["required"])
+                        enriched_fields.append("required_skills")
+                        result["required_skills"] = skills_data["required"]
+                    if skills_data.get("preferred"):
+                        update_values["preferred_skills"] = json.dumps(skills_data["preferred"])
+                        enriched_fields.append("preferred_skills")
+                        result["preferred_skills"] = skills_data["preferred"]
+
+                    # Create tech stack overlap visualization data
+                    tech_overlap = create_tech_stack_overlap(description, resume_text)
+                    if tech_overlap:
+                        update_values["tech_stack_overlap"] = json.dumps(tech_overlap)
+                        enriched_fields.append("tech_stack_overlap")
+                        result["tech_stack_overlap"] = tech_overlap
+
                     # Analyze job fit (pros/gaps)
                     fit_analysis = analyze_job_fit(
                         job_description=description,
@@ -301,6 +324,8 @@ def enrich_job_data(
 
                     logger.info(
                         f"Job analysis complete: {len(exp_requirements)} requirements, "
+                        f"{len(skills_data.get('required', []))} required skills, "
+                        f"{tech_overlap.get('match_percentage', 0)}% tech match, "
                         f"{len(fit_analysis.get('pros', []))} pros, "
                         f"{len(fit_analysis.get('gaps', []))} gaps"
                     )

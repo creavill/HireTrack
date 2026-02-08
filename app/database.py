@@ -337,6 +337,13 @@ def run_migrations(conn):
         conn.execute("ALTER TABLE jobs ADD COLUMN fit_gaps TEXT")  # JSON
         conn.execute("ALTER TABLE jobs ADD COLUMN fit_score INTEGER")
 
+    # Migration: Add tech stack overlap and required skills columns
+    if "tech_stack_overlap" not in jobs_columns:
+        logger.info("Migrating database: adding tech stack analysis columns...")
+        conn.execute("ALTER TABLE jobs ADD COLUMN tech_stack_overlap TEXT")  # JSON
+        conn.execute("ALTER TABLE jobs ADD COLUMN required_skills TEXT")  # JSON
+        conn.execute("ALTER TABLE jobs ADD COLUMN preferred_skills TEXT")  # JSON
+
     # Migration: Create enhanced scan_runs table for comprehensive scan history
     try:
         conn.execute("""

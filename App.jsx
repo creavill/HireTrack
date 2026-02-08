@@ -3,7 +3,7 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Search, RefreshCw, FileText, ExternalLink, ChevronDown, ChevronUp, Filter, Briefcase, CheckCircle, XCircle, Clock, Star, Plus, Mail, Phone, User, Upload, Edit2, Trash2, Sparkles, AlertCircle, Menu, X, Settings, Building2, FileStack, Map, BarChart3, Archive, Download, Copy, FileDown, HelpCircle, ArrowUpDown, Trophy } from 'lucide-react';
 import JobRow from './components/JobRow.jsx';
 import JobDetailPage from './components/JobDetailPage.jsx';
-import ActionBanner from './components/ActionBanner.jsx';
+// ActionBanner removed - all jobs are scored on import
 import AIProviderSettings from './components/AIProviderSettings.jsx';
 import EmailSourcesSettings from './components/EmailSourcesSettings.jsx';
 import { GamificationWidget, AchievementsView } from './components/GamificationWidget.jsx';
@@ -2667,14 +2667,6 @@ export default function App() {
         activeView === 'all_applications' ? (
           <>
             <StatsBar stats={stats} />
-
-            {/* Action Center Banner */}
-            <ActionBanner
-              stats={stats}
-              followupCount={0}
-              onScoreClick={handleScoreJobs}
-              onFollowupsClick={() => setActiveView('followups')}
-            />
 
             {/* Filters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">

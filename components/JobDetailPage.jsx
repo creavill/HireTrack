@@ -26,7 +26,8 @@ import {
   Copy,
   TrendingUp,
   AlertCircle,
-  Award
+  Award,
+  RefreshCw
 } from 'lucide-react';
 
 const API_BASE = '/api';
@@ -268,6 +269,7 @@ export default function JobDetailPage() {
   const [findingHM, setFindingHM] = useState(false);
   const [hiringManagerInfo, setHiringManagerInfo] = useState(null);
   const [archiving, setArchiving] = useState(false);
+  const [rescoring, setRescoring] = useState(false);
 
   const fetchJob = useCallback(async () => {
     setLoading(true);
@@ -394,12 +396,36 @@ export default function JobDetailPage() {
   const handleArchive = async () => {
     setArchiving(true);
     try {
-      await fetch(`${API_BASE}/jobs/${jobId}/archive`, { method: 'POST' });
-      navigate('/');
+      const res = await fetch(`${API_BASE}/jobs/${jobId}/archive`, { method: 'POST' });
+      if (res.ok) {
+        navigate('/');
+      } else {
+        const data = await res.json();
+        console.error('Archive failed:', data.error || 'Unknown error');
+        setArchiving(false);
+      }
     } catch (err) {
       console.error('Archive failed:', err);
       setArchiving(false);
     }
+  };
+
+  const handleRescore = async () => {
+    setRescoring(true);
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${jobId}/rescore`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        // Update the job with the new score
+        setJob(prev => ({ ...prev, score: data.new_score }));
+      } else {
+        const data = await res.json();
+        console.error('Rescore failed:', data.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Rescore failed:', err);
+    }
+    setRescoring(false);
   };
 
   const handleFindHiringManager = async () => {
@@ -614,6 +640,198 @@ export default function JobDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Tech Stack Overlap Visualization */}
+          {job.tech_stack_overlap && (() => {
+            try {
+              const overlap = typeof job.tech_stack_overlap === 'string'
+                ? JSON.parse(job.tech_stack_overlap)
+                : job.tech_stack_overlap;
+
+              const categoryLabels = {
+                languages: 'Languages',
+                frontend: 'Frontend',
+                backend: 'Backend',
+                cloud: 'Cloud',
+                devops: 'DevOps',
+                databases: 'Databases',
+                data: 'Data',
+                ai_ml: 'AI/ML',
+                tools: 'Tools',
+                concepts: 'Concepts'
+              };
+
+              const allCategories = new Set([
+                ...Object.keys(overlap.matched || {}),
+                ...Object.keys(overlap.missing || {})
+              ]);
+
+              if (allCategories.size > 0) {
+                return (
+                  <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
+                    <div className="px-8 py-5 border-b border-warm-gray bg-warm-gray/10 flex items-center justify-between">
+                      <h2 className="font-display text-xl text-ink flex items-center gap-2">
+                        <Briefcase size={18} className="text-copper" />
+                        Tech Stack Overlap
+                      </h2>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-slate uppercase tracking-wide">
+                          {overlap.summary?.matched_count || 0} matched • {overlap.summary?.missing_count || 0} missing
+                        </span>
+                        <span className={`px-3 py-1 rounded-sm font-mono font-bold text-sm ${
+                          overlap.match_percentage >= 70 ? 'bg-patina/20 text-patina' :
+                          overlap.match_percentage >= 50 ? 'bg-cream/20 text-cream' :
+                          'bg-rust/20 text-rust'
+                        }`}>
+                          {overlap.match_percentage}% Match
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-8">
+                      {/* Visual Progress Bar */}
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between text-xs text-slate mb-2">
+                          <span>Skills Match</span>
+                          <span>{overlap.match_percentage}%</span>
+                        </div>
+                        <div className="h-4 bg-warm-gray/30 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              overlap.match_percentage >= 70 ? 'bg-patina' :
+                              overlap.match_percentage >= 50 ? 'bg-cream' : 'bg-rust'
+                            }`}
+                            style={{ width: `${overlap.match_percentage}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Skills by Category */}
+                      <div className="space-y-4">
+                        {Array.from(allCategories).map(category => {
+                          const matched = overlap.matched?.[category] || [];
+                          const missing = overlap.missing?.[category] || [];
+                          if (matched.length === 0 && missing.length === 0) return null;
+
+                          return (
+                            <div key={category} className="border-b border-warm-gray/50 pb-4 last:border-0">
+                              <h3 className="text-sm font-semibold text-ink uppercase tracking-wide mb-3">
+                                {categoryLabels[category] || category}
+                              </h3>
+                              <div className="flex flex-wrap gap-2">
+                                {matched.map((skill, i) => (
+                                  <span
+                                    key={`m-${i}`}
+                                    className="px-3 py-1.5 bg-patina/20 text-patina text-sm rounded-sm flex items-center gap-1.5"
+                                  >
+                                    <CheckCircle size={12} />
+                                    {skill}
+                                  </span>
+                                ))}
+                                {missing.map((skill, i) => (
+                                  <span
+                                    key={`x-${i}`}
+                                    className="px-3 py-1.5 bg-rust/10 text-rust text-sm rounded-sm flex items-center gap-1.5"
+                                  >
+                                    <XCircle size={12} />
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Extra Skills (yours that job doesn't mention) */}
+                      {overlap.extra && Object.keys(overlap.extra).length > 0 && (
+                        <div className="mt-6 pt-6 border-t border-warm-gray">
+                          <h3 className="text-sm font-semibold text-slate uppercase tracking-wide mb-3 flex items-center gap-2">
+                            <Star size={14} />
+                            Your Additional Skills (not listed in job)
+                          </h3>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.values(overlap.extra).flat().slice(0, 15).map((skill, i) => (
+                              <span
+                                key={i}
+                                className="px-3 py-1.5 bg-copper/10 text-copper text-sm rounded-sm"
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+            } catch (e) {
+              console.error('Failed to parse tech_stack_overlap:', e);
+            }
+            return null;
+          })()}
+
+          {/* Required & Preferred Skills */}
+          {(job.required_skills || job.preferred_skills) && (() => {
+            try {
+              const required = job.required_skills
+                ? (typeof job.required_skills === 'string' ? JSON.parse(job.required_skills) : job.required_skills)
+                : [];
+              const preferred = job.preferred_skills
+                ? (typeof job.preferred_skills === 'string' ? JSON.parse(job.preferred_skills) : job.preferred_skills)
+                : [];
+
+              if (required.length > 0 || preferred.length > 0) {
+                return (
+                  <div className="bg-parchment border border-warm-gray rounded-sm shadow-sm">
+                    <div className="px-8 py-5 border-b border-warm-gray bg-warm-gray/10">
+                      <h2 className="font-display text-xl text-ink flex items-center gap-2">
+                        <FileText size={18} className="text-copper" />
+                        Skills Mentioned
+                      </h2>
+                    </div>
+                    <div className="p-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {required.length > 0 && (
+                          <div>
+                            <h3 className="text-sm font-semibold text-rust uppercase tracking-wide mb-3 flex items-center gap-2">
+                              Required Skills
+                            </h3>
+                            <ul className="space-y-2">
+                              {required.map((skill, i) => (
+                                <li key={i} className="flex items-center gap-2 text-sm text-ink">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rust flex-shrink-0" />
+                                  {skill}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {preferred.length > 0 && (
+                          <div>
+                            <h3 className="text-sm font-semibold text-cream uppercase tracking-wide mb-3 flex items-center gap-2">
+                              Nice to Have
+                            </h3>
+                            <ul className="space-y-2">
+                              {preferred.map((skill, i) => (
+                                <li key={i} className="flex items-center gap-2 text-sm text-ink">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-cream flex-shrink-0" />
+                                  {skill}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            } catch (e) {
+              console.error('Failed to parse skills:', e);
+            }
+            return null;
+          })()}
 
           {/* Experience Requirements */}
           {job.experience_requirements && (() => {
@@ -959,6 +1177,24 @@ export default function JobDetailPage() {
                   <>
                     <Users size={16} />
                     Find Hiring Manager
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleRescore}
+                disabled={rescoring}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-transparent border border-cream text-cream font-body uppercase tracking-wide text-sm hover:bg-cream/10 disabled:opacity-50 transition-colors rounded-sm"
+              >
+                {rescoring ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Rescoring...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    Rescore Job
                   </>
                 )}
               </button>

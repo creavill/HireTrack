@@ -632,15 +632,21 @@ def register_routes(app):
         """
         try:
             from app.startup import get_health_status
+
             status = get_health_status()
             http_status = 200 if status["status"] == "healthy" else 503
             return jsonify(status), http_status
         except Exception as e:
-            return jsonify({
-                "status": "unhealthy",
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "error": str(e)
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "status": "unhealthy",
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "error": str(e),
+                    }
+                ),
+                503,
+            )
 
     @app.route("/api/health/ready")
     def readiness_check():
@@ -862,7 +868,12 @@ def register_routes(app):
                 # Gamification: Track application
                 if data["status"] == "applied":
                     try:
-                        from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                        from app.gamification import (
+                            update_daily_progress,
+                            check_achievements,
+                            init_gamification_tables,
+                        )
+
                         init_gamification_tables()
                         update_daily_progress("apply_jobs")
                         check_achievements()
@@ -875,6 +886,7 @@ def register_routes(app):
         if "viewed" in data and data["viewed"]:
             try:
                 from app.gamification import update_daily_progress, init_gamification_tables
+
                 init_gamification_tables()
                 update_daily_progress("review_jobs")
             except Exception as e:
@@ -1058,28 +1070,40 @@ def register_routes(app):
 
         write_log(log_file, f"Phase 1: Found {len(jobs)} jobs from email alerts")
         write_log(log_file, f"Phase 2: Found {len(followups)} follow-up emails")
-        write_log(log_file, f"Phase 3: Discovered {scan_result.get('phase3_discoveries', 0)} new sources")
+        write_log(
+            log_file, f"Phase 3: Discovered {scan_result.get('phase3_discoveries', 0)} new sources"
+        )
 
         # Log each job found
         for i, job in enumerate(jobs):
-            write_log(log_file, f"Job #{i+1}: {job.get('title')} at {job.get('company')}", {
-                "source": job.get("source"),
-                "location": job.get("location"),
-                "url": job.get("url")[:80] if job.get("url") else None
-            })
+            write_log(
+                log_file,
+                f"Job #{i+1}: {job.get('title')} at {job.get('company')}",
+                {
+                    "source": job.get("source"),
+                    "location": job.get("location"),
+                    "url": job.get("url")[:80] if job.get("url") else None,
+                },
+            )
 
         # Log each followup found
         for i, fu in enumerate(followups):
-            write_log(log_file, f"Followup #{i+1}: {fu.get('type')} - {fu.get('subject')[:60] if fu.get('subject') else 'No subject'}", {
-                "company": fu.get("company"),
-                "classification": fu.get("type")
-            })
+            write_log(
+                log_file,
+                f"Followup #{i+1}: {fu.get('type')} - {fu.get('subject')[:60] if fu.get('subject') else 'No subject'}",
+                {"company": fu.get("company"), "classification": fu.get("type")},
+            )
 
         resume_text = get_combined_resume_text()
         if not resume_text:
             write_log(log_file, "ERROR: No resumes found")
             return (
-                jsonify({"error": "No resumes found. Add .txt/.md files to resumes/ folder", "log_file": str(log_file.name)}),
+                jsonify(
+                    {
+                        "error": "No resumes found. Add .txt/.md files to resumes/ folder",
+                        "log_file": str(log_file.name),
+                    }
+                ),
                 400,
             )
 
@@ -1246,8 +1270,14 @@ def register_routes(app):
 
         # Log summary
         write_log(log_file, "=== SCAN OPERATION COMPLETED ===")
-        write_log(log_file, f"Summary: found={len(jobs)}, stored={stored_count}, filtered={filtered_count}, duplicates={duplicate_count}")
-        write_log(log_file, f"Followups: found={len(followups)}, new={followups_new}, jobs_created={scan_result['phase2_jobs_created']}")
+        write_log(
+            log_file,
+            f"Summary: found={len(jobs)}, stored={stored_count}, filtered={filtered_count}, duplicates={duplicate_count}",
+        )
+        write_log(
+            log_file,
+            f"Followups: found={len(followups)}, new={followups_new}, jobs_created={scan_result['phase2_jobs_created']}",
+        )
 
         logger.info(
             f"Scan Summary: {len(jobs)} found, {stored_count} stored, "
@@ -1257,7 +1287,12 @@ def register_routes(app):
 
         # Gamification: Track scan completion
         try:
-            from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+            from app.gamification import (
+                update_daily_progress,
+                check_achievements,
+                init_gamification_tables,
+            )
+
             init_gamification_tables()
             update_daily_progress("scan_emails")
             check_achievements()
@@ -1342,7 +1377,10 @@ def register_routes(app):
 
             # Log all jobs found
             for i, job in enumerate(jobs):
-                write_log(log_file, f"  Job #{i+1}: {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}")
+                write_log(
+                    log_file,
+                    f"  Job #{i+1}: {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}",
+                )
 
             # Load resumes for scoring
             resume_text = get_combined_resume_text()
@@ -1388,10 +1426,20 @@ def register_routes(app):
                                            baseline_score, created_at, updated_at, email_date,
                                            is_filtered, notes, enrichment_status)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'skipped')""",
-                        (job["job_id"], job["title"], job["company"], job["location"],
-                         job["url"], job["source"], job["raw_text"], baseline_score,
-                         job["created_at"], datetime.now().isoformat(),
-                         job.get("email_date", job["created_at"]), reason),
+                        (
+                            job["job_id"],
+                            job["title"],
+                            job["company"],
+                            job["location"],
+                            job["url"],
+                            job["source"],
+                            job["raw_text"],
+                            baseline_score,
+                            job["created_at"],
+                            datetime.now().isoformat(),
+                            job.get("email_date", job["created_at"]),
+                            reason,
+                        ),
                     )
                     conn.commit()
                     continue
@@ -1402,10 +1450,19 @@ def register_routes(app):
                                        baseline_score, created_at, updated_at, email_date,
                                        is_filtered, enrichment_status)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')""",
-                    (job["job_id"], job["title"], job["company"], job["location"],
-                     job["url"], job["source"], job["raw_text"], baseline_score,
-                     job["created_at"], datetime.now().isoformat(),
-                     job.get("email_date", job["created_at"])),
+                    (
+                        job["job_id"],
+                        job["title"],
+                        job["company"],
+                        job["location"],
+                        job["url"],
+                        job["source"],
+                        job["raw_text"],
+                        baseline_score,
+                        job["created_at"],
+                        datetime.now().isoformat(),
+                        job.get("email_date", job["created_at"]),
+                    ),
                 )
                 conn.commit()
                 new_job_ids.append(job["job_id"])
@@ -1419,16 +1476,16 @@ def register_routes(app):
                 from app.enrichment import enrich_job
 
                 # Get all jobs needing enrichment (pending status)
-                pending_jobs = conn.execute(
-                    """SELECT job_id, title, company, url FROM jobs
-                       WHERE enrichment_status = 'pending' AND is_filtered = 0"""
-                ).fetchall()
+                pending_jobs = conn.execute("""SELECT job_id, title, company, url FROM jobs
+                       WHERE enrichment_status = 'pending' AND is_filtered = 0""").fetchall()
 
                 write_log(log_file, f"Jobs to enrich: {len(pending_jobs)}")
 
                 for job_row in pending_jobs:
                     job_id = job_row["job_id"]
-                    write_log(log_file, f"  Enriching: {job_row['title'][:40]} at {job_row['company']}")
+                    write_log(
+                        log_file, f"  Enriching: {job_row['title'][:40]} at {job_row['company']}"
+                    )
 
                     try:
                         enrich_result = enrich_job(job_id)
@@ -1436,24 +1493,34 @@ def register_routes(app):
                             # Mark as enriched
                             conn.execute(
                                 "UPDATE jobs SET enrichment_status = 'enriched' WHERE job_id = ?",
-                                (job_id,)
+                                (job_id,),
                             )
                             conn.commit()
                             results["jobs_enriched"] += 1
                             # Detailed enrichment logging
-                            salary = enrich_result.get('salary_estimate', 'N/A')
-                            desc = enrich_result.get('full_description', '')
+                            salary = enrich_result.get("salary_estimate", "N/A")
+                            desc = enrich_result.get("full_description", "")
                             desc_len = len(desc) if desc else 0
-                            source = enrich_result.get('source_url', 'N/A')
-                            fields = enrich_result.get('enriched_fields', [])
+                            source = enrich_result.get("source_url", "N/A")
+                            fields = enrich_result.get("enriched_fields", [])
                             write_log(log_file, f"    [OK] Enriched successfully:")
                             write_log(log_file, f"        - Salary: {salary}")
                             write_log(log_file, f"        - Description: {desc_len} chars")
-                            write_log(log_file, f"        - Source: {source[:60]}..." if source and len(str(source)) > 60 else f"        - Source: {source}")
-                            write_log(log_file, f"        - Fields updated: {', '.join(fields) if fields else 'none'}")
+                            write_log(
+                                log_file,
+                                (
+                                    f"        - Source: {source[:60]}..."
+                                    if source and len(str(source)) > 60
+                                    else f"        - Source: {source}"
+                                ),
+                            )
+                            write_log(
+                                log_file,
+                                f"        - Fields updated: {', '.join(fields) if fields else 'none'}",
+                            )
                         else:
-                            error_msg = enrich_result.get('error', 'Unknown error')
-                            status = enrich_result.get('enrichment_status', 'unknown')
+                            error_msg = enrich_result.get("error", "Unknown error")
+                            status = enrich_result.get("enrichment_status", "unknown")
                             write_log(log_file, f"    [FAIL] Enrichment failed:")
                             write_log(log_file, f"        - Status: {status}")
                             write_log(log_file, f"        - Error: {error_msg}")
@@ -1486,7 +1553,13 @@ def register_routes(app):
                     conn.execute(
                         """UPDATE jobs SET score = ?, baseline_score = ?, notes = ?,
                            enrichment_status = 'scored', updated_at = ? WHERE job_id = ?""",
-                        (final_score, final_score, reason, datetime.now().isoformat(), job["job_id"]),
+                        (
+                            final_score,
+                            final_score,
+                            reason,
+                            datetime.now().isoformat(),
+                            job["job_id"],
+                        ),
                     )
                     conn.commit()
                     results["jobs_scored"] += 1
@@ -1517,11 +1590,18 @@ def register_routes(app):
                     """INSERT INTO followups (company, subject, type, snippet, email_date, job_id,
                        created_at, gmail_message_id, sender_email, ai_summary)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (followup["company"], followup["subject"], followup["type"],
-                     followup["snippet"], followup["email_date"], followup["job_id"],
-                     datetime.now().isoformat(), followup.get("gmail_message_id"),
-                     followup.get("sender_email"),
-                     f"{followup['type'].title()} from {followup['company']}"),
+                    (
+                        followup["company"],
+                        followup["subject"],
+                        followup["type"],
+                        followup["snippet"],
+                        followup["email_date"],
+                        followup["job_id"],
+                        datetime.now().isoformat(),
+                        followup.get("gmail_message_id"),
+                        followup.get("sender_email"),
+                        f"{followup['type'].title()} from {followup['company']}",
+                    ),
                 )
                 conn.commit()
                 results["followups_new"] += 1
@@ -1537,7 +1617,10 @@ def register_routes(app):
                         new_status = current
                         if followup["type"] == "rejection":
                             new_status = "rejected"
-                        elif followup["type"] == "interview" and current not in ["interviewing", "offer"]:
+                        elif followup["type"] == "interview" and current not in [
+                            "interviewing",
+                            "offer",
+                        ]:
                             new_status = "interviewing"
                         elif followup["type"] == "offer":
                             new_status = "offer"
@@ -1545,7 +1628,7 @@ def register_routes(app):
                         if new_status != current:
                             conn.execute(
                                 "UPDATE jobs SET status = ? WHERE job_id = ?",
-                                (new_status, followup["job_id"])
+                                (new_status, followup["job_id"]),
                             )
                             conn.commit()
 
@@ -1692,12 +1775,9 @@ def register_routes(app):
         if enrich_first:
             write_log(log_file, "--- ENRICHMENT PHASE ---")
             pending_jobs = [
-                dict(row)
-                for row in conn.execute(
-                    """SELECT job_id, title, company, url FROM jobs
+                dict(row) for row in conn.execute("""SELECT job_id, title, company, url FROM jobs
                        WHERE enrichment_status = 'pending' AND is_filtered = 0
-                       ORDER BY baseline_score DESC LIMIT 20"""
-                ).fetchall()
+                       ORDER BY baseline_score DESC LIMIT 20""").fetchall()
             ]
 
             write_log(log_file, f"Found {len(pending_jobs)} jobs needing enrichment")
@@ -1726,9 +1806,7 @@ def register_routes(app):
         if force_rescore:
             jobs = [
                 dict(row)
-                for row in conn.execute(
-                    "SELECT * FROM jobs WHERE is_filtered = 0"
-                ).fetchall()
+                for row in conn.execute("SELECT * FROM jobs WHERE is_filtered = 0").fetchall()
             ]
         else:
             jobs = [
@@ -1751,12 +1829,22 @@ def register_routes(app):
                 # Update job with new score
                 conn.execute(
                     "UPDATE jobs SET score = ?, baseline_score = ?, notes = ?, updated_at = ? WHERE job_id = ?",
-                    (baseline_score, baseline_score, reason, datetime.now().isoformat(), job["job_id"]),
+                    (
+                        baseline_score,
+                        baseline_score,
+                        reason,
+                        datetime.now().isoformat(),
+                        job["job_id"],
+                    ),
                 )
                 conn.commit()
                 scored_count += 1
 
-                write_log(log_file, f"  ✓ Score: {baseline_score}", {"reason": reason[:200] if reason else None})
+                write_log(
+                    log_file,
+                    f"  ✓ Score: {baseline_score}",
+                    {"reason": reason[:200] if reason else None},
+                )
                 logger.info(f"✓ Scored: {job['title'][:50]} - Score {baseline_score}")
             except Exception as e:
                 write_log(log_file, f"  ✗ Error: {str(e)}")
@@ -1766,14 +1854,19 @@ def register_routes(app):
         conn.close()
 
         write_log(log_file, "=== SCORE JOBS OPERATION COMPLETED ===")
-        write_log(log_file, f"Summary: scored={scored_count}, total={len(jobs)}, enriched={enriched_count}")
+        write_log(
+            log_file,
+            f"Summary: scored={scored_count}, total={len(jobs)}, enriched={enriched_count}",
+        )
 
-        return jsonify({
-            "scored": scored_count,
-            "total": len(jobs),
-            "enriched": enriched_count,
-            "log_file": str(log_file.name)
-        })
+        return jsonify(
+            {
+                "scored": scored_count,
+                "total": len(jobs),
+                "enriched": enriched_count,
+                "log_file": str(log_file.name),
+            }
+        )
 
     @app.route("/api/jobs/bulk-rescore", methods=["POST"])
     def bulk_rescore():
@@ -1808,7 +1901,9 @@ def register_routes(app):
             if resume_id:
                 # Get specific resume
                 conn = get_db()
-                cursor = conn.execute("SELECT content FROM resume_variants WHERE resume_id = ?", (resume_id,))
+                cursor = conn.execute(
+                    "SELECT content FROM resume_variants WHERE resume_id = ?", (resume_id,)
+                )
                 row = cursor.fetchone()
                 if not row:
                     return jsonify({"error": f"Resume {resume_id} not found"}), 404
@@ -1824,10 +1919,7 @@ def register_routes(app):
         # Get all active jobs
         conn = get_db()
         jobs = [
-            dict(row)
-            for row in conn.execute(
-                "SELECT * FROM jobs WHERE is_filtered = 0"
-            ).fetchall()
+            dict(row) for row in conn.execute("SELECT * FROM jobs WHERE is_filtered = 0").fetchall()
         ]
         write_log(log_file, f"Found {len(jobs)} jobs to re-score")
 
@@ -1840,7 +1932,13 @@ def register_routes(app):
 
                 conn.execute(
                     "UPDATE jobs SET score = ?, baseline_score = ?, notes = ?, updated_at = ? WHERE job_id = ?",
-                    (baseline_score, baseline_score, reason, datetime.now().isoformat(), job["job_id"]),
+                    (
+                        baseline_score,
+                        baseline_score,
+                        reason,
+                        datetime.now().isoformat(),
+                        job["job_id"],
+                    ),
                 )
                 conn.commit()
                 rescored_count += 1
@@ -1855,11 +1953,9 @@ def register_routes(app):
         write_log(log_file, f"=== COMPLETED: {rescored_count}/{len(jobs)} jobs re-scored ===")
         logger.info(f"Bulk re-score complete: {rescored_count}/{len(jobs)} jobs")
 
-        return jsonify({
-            "rescored": rescored_count,
-            "total": len(jobs),
-            "log_file": str(log_file.name)
-        })
+        return jsonify(
+            {"rescored": rescored_count, "total": len(jobs), "log_file": str(log_file.name)}
+        )
 
     @app.route("/api/jobs/cleanup-stale", methods=["POST"])
     def cleanup_stale_jobs():
@@ -1903,7 +1999,7 @@ def register_routes(app):
                 AND (email_date < ? OR (email_date IS NULL AND created_at < ?))
                 ORDER BY email_date ASC
                 """,
-                (cutoff_date, cutoff_date)
+                (cutoff_date, cutoff_date),
             ).fetchall()
         ]
 
@@ -1915,7 +2011,7 @@ def register_routes(app):
             for job in stale_jobs:
                 cursor.execute(
                     "UPDATE jobs SET status = 'passed', updated_at = ? WHERE job_id = ?",
-                    (datetime.now().isoformat(), job["job_id"])
+                    (datetime.now().isoformat(), job["job_id"]),
                 )
                 archived_count += 1
             conn.commit()
@@ -1936,11 +2032,13 @@ def register_routes(app):
                     "job_id": j["job_id"],
                     "title": j["title"],
                     "company": j["company"],
-                    "date": j["email_date"] or j["created_at"]
+                    "date": j["email_date"] or j["created_at"],
                 }
                 for j in stale_jobs[:20]  # Limit preview to 20
             ]
-            result["message"] = f"Preview mode: {len(stale_jobs)} stale jobs found. Set archive=true to archive them."
+            result["message"] = (
+                f"Preview mode: {len(stale_jobs)} stale jobs found. Set archive=true to archive them."
+            )
 
         return jsonify(result)
 
@@ -2298,7 +2396,7 @@ def register_routes(app):
         try:
             followup = conn.execute(
                 "SELECT gmail_message_id, full_body, subject, sender_email, email_date FROM followups WHERE id = ?",
-                (followup_id,)
+                (followup_id,),
             ).fetchone()
 
             if not followup:
@@ -2308,12 +2406,14 @@ def register_routes(app):
 
             # If we already have full_body, return it
             if followup.get("full_body"):
-                return jsonify({
-                    "full_body": followup["full_body"],
-                    "subject": followup["subject"],
-                    "from": followup["sender_email"],
-                    "date": followup["email_date"]
-                })
+                return jsonify(
+                    {
+                        "full_body": followup["full_body"],
+                        "subject": followup["subject"],
+                        "from": followup["sender_email"],
+                        "date": followup["email_date"],
+                    }
+                )
 
             # Otherwise try to fetch from Gmail
             gmail_msg_id = followup.get("gmail_message_id")
@@ -2329,17 +2429,18 @@ def register_routes(app):
 
                 # Store it for future use
                 conn.execute(
-                    "UPDATE followups SET full_body = ? WHERE id = ?",
-                    (full_body, followup_id)
+                    "UPDATE followups SET full_body = ? WHERE id = ?", (full_body, followup_id)
                 )
                 conn.commit()
 
-                return jsonify({
-                    "full_body": full_body,
-                    "subject": followup["subject"],
-                    "from": followup["sender_email"],
-                    "date": followup["email_date"]
-                })
+                return jsonify(
+                    {
+                        "full_body": full_body,
+                        "subject": followup["subject"],
+                        "from": followup["sender_email"],
+                        "date": followup["email_date"],
+                    }
+                )
             except Exception as e:
                 logger.error(f"Error fetching email from Gmail: {e}")
                 return jsonify({"error": f"Could not fetch email: {str(e)}"}), 500
@@ -4040,7 +4141,12 @@ def register_routes(app):
 
             # Gamification: Track application
             try:
-                from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                from app.gamification import (
+                    update_daily_progress,
+                    check_achievements,
+                    init_gamification_tables,
+                )
+
                 init_gamification_tables()
                 update_daily_progress("apply_jobs")
                 check_achievements()
@@ -4817,6 +4923,103 @@ def register_routes(app):
             logger.error(f"Error getting enrichment for {job_id}: {e}")
             return jsonify({"error": str(e)}), 500
 
+    @app.route("/api/jobs/<job_id>/rescore", methods=["POST"])
+    def api_rescore_job(job_id):
+        """
+        Rescore a job using AI without web search.
+
+        Uses the job's existing description and the user's resumes to
+        recalculate the baseline score with the improved scoring prompt.
+
+        Route: POST /api/jobs/<job_id>/rescore
+
+        Returns:
+            JSON: {success: true, old_score: N, new_score: M, tech_stack_match: str, missing_skills: []}
+        """
+        try:
+            conn = get_db()
+            job = conn.execute(
+                """
+                SELECT job_id, title, company, location, raw_text, job_description,
+                       full_description, score
+                FROM jobs WHERE job_id = ?
+            """,
+                (job_id,),
+            ).fetchone()
+
+            if not job:
+                conn.close()
+                return jsonify({"error": "Job not found"}), 404
+
+            job_dict = dict(job)
+            old_score = job_dict.get("score", 50)
+
+            # Use the best available description
+            description = (
+                job_dict.get("full_description")
+                or job_dict.get("job_description")
+                or job_dict.get("raw_text")
+                or ""
+            )
+            job_dict["raw_text"] = description
+
+            # Get resume text
+            from resume_manager import get_combined_resume_text
+
+            try:
+                resume_text = get_combined_resume_text()
+            except ValueError as e:
+                conn.close()
+                return jsonify({"error": str(e)}), 400
+
+            # Run AI scoring
+            from app.ai.analyzer import ai_filter_and_score
+
+            keep, new_score, reason = ai_filter_and_score(job_dict, resume_text)
+
+            # Update the job's score in the database
+            conn.execute(
+                """
+                UPDATE jobs
+                SET score = ?, updated_at = ?
+                WHERE job_id = ?
+            """,
+                (new_score, datetime.now().isoformat(), job_id),
+            )
+            conn.commit()
+            conn.close()
+
+            # Parse reason for additional info
+            tech_match = "unknown"
+            missing_skills = []
+            if "tech_stack_match" in reason:
+                try:
+                    import json
+
+                    result = json.loads(reason)
+                    tech_match = result.get("tech_stack_match", "unknown")
+                    missing_skills = result.get("missing_key_skills", [])
+                except:
+                    pass
+
+            logger.info(f"Rescored job {job_id}: {old_score} -> {new_score}")
+
+            return jsonify(
+                {
+                    "success": True,
+                    "job_id": job_id,
+                    "old_score": old_score,
+                    "new_score": new_score,
+                    "tech_stack_match": tech_match,
+                    "missing_skills": missing_skills,
+                    "reason": reason,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error rescoring job {job_id}: {e}")
+            return jsonify({"error": str(e)}), 500
+
     @app.route("/api/jobs/<job_id>/logo", methods=["POST"])
     def api_fetch_logo(job_id):
         """
@@ -5434,25 +5637,27 @@ def register_routes(app):
             # Build query
             if operation:
                 runs = [
-                    dict(row) for row in conn.execute(
+                    dict(row)
+                    for row in conn.execute(
                         """
                         SELECT * FROM scan_runs
                         WHERE operation_type = ?
                         ORDER BY started_at DESC
                         LIMIT ?
                         """,
-                        (operation, limit)
+                        (operation, limit),
                     ).fetchall()
                 ]
             else:
                 runs = [
-                    dict(row) for row in conn.execute(
+                    dict(row)
+                    for row in conn.execute(
                         """
                         SELECT * FROM scan_runs
                         ORDER BY started_at DESC
                         LIMIT ?
                         """,
-                        (limit,)
+                        (limit,),
                     ).fetchall()
                 ]
 
@@ -5464,11 +5669,9 @@ def register_routes(app):
                 "SELECT started_at FROM scan_runs WHERE operation_type = 'scan' ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
 
-            return jsonify({
-                "runs": runs,
-                "total_runs": total,
-                "latest_scan": latest[0] if latest else None
-            })
+            return jsonify(
+                {"runs": runs, "total_runs": total, "latest_scan": latest[0] if latest else None}
+            )
 
         except Exception as e:
             logger.error(f"Error fetching scan history: {e}")
@@ -5488,10 +5691,7 @@ def register_routes(app):
         """
         conn = get_db()
         try:
-            run = conn.execute(
-                "SELECT * FROM scan_runs WHERE run_id = ?",
-                (run_id,)
-            ).fetchone()
+            run = conn.execute("SELECT * FROM scan_runs WHERE run_id = ?", (run_id,)).fetchone()
 
             if not run:
                 return jsonify({"error": "Run not found"}), 404
@@ -5534,89 +5734,110 @@ def register_routes(app):
         conn = get_db()
         try:
             # Get all jobs
-            jobs = [dict(row) for row in conn.execute(
-                "SELECT * FROM jobs WHERE is_filtered = 0 AND status != 'hidden'"
-            ).fetchall()]
+            jobs = [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT * FROM jobs WHERE is_filtered = 0 AND status != 'hidden'"
+                ).fetchall()
+            ]
 
             # Get all followups
-            followups = [dict(row) for row in conn.execute(
-                "SELECT * FROM followups"
-            ).fetchall()]
+            followups = [dict(row) for row in conn.execute("SELECT * FROM followups").fetchall()]
 
             # Get resumes
-            resumes = [dict(row) for row in conn.execute(
-                "SELECT resume_id, name, usage_count FROM resume_variants WHERE is_active = 1"
-            ).fetchall()]
+            resumes = [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT resume_id, name, usage_count FROM resume_variants WHERE is_active = 1"
+                ).fetchall()
+            ]
 
             # Calculate funnel stats
             total = len(jobs)
-            new_count = len([j for j in jobs if j['status'] == 'new'])
-            interested = len([j for j in jobs if j['status'] == 'interested'])
-            applied = len([j for j in jobs if j['status'] == 'applied'])
-            interviewing = len([j for j in jobs if j['status'] == 'interviewing'])
-            offers = len([j for j in jobs if j['status'] == 'offer'])
-            rejected = len([j for j in jobs if j['status'] == 'rejected'])
-            passed = len([j for j in jobs if j['status'] == 'passed'])
+            new_count = len([j for j in jobs if j["status"] == "new"])
+            interested = len([j for j in jobs if j["status"] == "interested"])
+            applied = len([j for j in jobs if j["status"] == "applied"])
+            interviewing = len([j for j in jobs if j["status"] == "interviewing"])
+            offers = len([j for j in jobs if j["status"] == "offer"])
+            rejected = len([j for j in jobs if j["status"] == "rejected"])
+            passed = len([j for j in jobs if j["status"] == "passed"])
 
             # Calculate response rate (responses / applications)
             applications_sent = applied + interviewing + offers + rejected
             responses = interviewing + offers + rejected
-            response_rate = round((responses / applications_sent * 100) if applications_sent > 0 else 0, 1)
+            response_rate = round(
+                (responses / applications_sent * 100) if applications_sent > 0 else 0, 1
+            )
 
             # Calculate interview rate
-            interview_rate = round((interviewing / applications_sent * 100) if applications_sent > 0 else 0, 1)
+            interview_rate = round(
+                (interviewing / applications_sent * 100) if applications_sent > 0 else 0, 1
+            )
 
             # Calculate offer rate
-            offer_rate = round((offers / applications_sent * 100) if applications_sent > 0 else 0, 1)
+            offer_rate = round(
+                (offers / applications_sent * 100) if applications_sent > 0 else 0, 1
+            )
 
             # Stats by source
             sources = {}
             for job in jobs:
-                src = job.get('source') or 'Unknown'
+                src = job.get("source") or "Unknown"
                 if src not in sources:
-                    sources[src] = {'total': 0, 'applied': 0, 'interviews': 0, 'offers': 0, 'rejected': 0}
-                sources[src]['total'] += 1
-                if job['status'] in ['applied', 'interviewing', 'offer', 'rejected']:
-                    sources[src]['applied'] += 1
-                if job['status'] == 'interviewing':
-                    sources[src]['interviews'] += 1
-                if job['status'] == 'offer':
-                    sources[src]['offers'] += 1
-                if job['status'] == 'rejected':
-                    sources[src]['rejected'] += 1
+                    sources[src] = {
+                        "total": 0,
+                        "applied": 0,
+                        "interviews": 0,
+                        "offers": 0,
+                        "rejected": 0,
+                    }
+                sources[src]["total"] += 1
+                if job["status"] in ["applied", "interviewing", "offer", "rejected"]:
+                    sources[src]["applied"] += 1
+                if job["status"] == "interviewing":
+                    sources[src]["interviews"] += 1
+                if job["status"] == "offer":
+                    sources[src]["offers"] += 1
+                if job["status"] == "rejected":
+                    sources[src]["rejected"] += 1
 
             # Stats by resume
             resume_stats = {}
             for resume in resumes:
-                resume_stats[resume['resume_id']] = {
-                    'name': resume['name'],
-                    'usage_count': resume['usage_count'] or 0,
-                    'jobs_applied': 0,
-                    'interviews': 0,
-                    'offers': 0
+                resume_stats[resume["resume_id"]] = {
+                    "name": resume["name"],
+                    "usage_count": resume["usage_count"] or 0,
+                    "jobs_applied": 0,
+                    "interviews": 0,
+                    "offers": 0,
                 }
 
             for job in jobs:
-                rid = job.get('selected_resume_id') or job.get('recommended_resume_id')
+                rid = job.get("selected_resume_id") or job.get("recommended_resume_id")
                 if rid and rid in resume_stats:
-                    if job['status'] in ['applied', 'interviewing', 'offer', 'rejected']:
-                        resume_stats[rid]['jobs_applied'] += 1
-                    if job['status'] == 'interviewing':
-                        resume_stats[rid]['interviews'] += 1
-                    if job['status'] == 'offer':
-                        resume_stats[rid]['offers'] += 1
+                    if job["status"] in ["applied", "interviewing", "offer", "rejected"]:
+                        resume_stats[rid]["jobs_applied"] += 1
+                    if job["status"] == "interviewing":
+                        resume_stats[rid]["interviews"] += 1
+                    if job["status"] == "offer":
+                        resume_stats[rid]["offers"] += 1
 
             # Timeline - applications per week
             from collections import defaultdict
+
             weekly = defaultdict(int)
             for job in jobs:
-                if job.get('applied_date') or (job['status'] in ['applied', 'interviewing', 'offer', 'rejected']):
-                    date_str = job.get('applied_date') or job.get('email_date') or job.get('created_at')
+                if job.get("applied_date") or (
+                    job["status"] in ["applied", "interviewing", "offer", "rejected"]
+                ):
+                    date_str = (
+                        job.get("applied_date") or job.get("email_date") or job.get("created_at")
+                    )
                     if date_str:
                         try:
-                            date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                            date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
                             week_start = date - timedelta(days=date.weekday())
-                            week_key = week_start.strftime('%Y-%m-%d')
+                            week_key = week_start.strftime("%Y-%m-%d")
                             weekly[week_key] += 1
                         except:
                             pass
@@ -5627,35 +5848,41 @@ def register_routes(app):
             # Followup stats by type
             followup_types = {}
             for f in followups:
-                ftype = f.get('type') or 'unknown'
+                ftype = f.get("type") or "unknown"
                 followup_types[ftype] = followup_types.get(ftype, 0) + 1
 
-            return jsonify({
-                'funnel': {
-                    'total': total,
-                    'new': new_count,
-                    'interested': interested,
-                    'applied': applied,
-                    'interviewing': interviewing,
-                    'offers': offers,
-                    'rejected': rejected,
-                    'passed': passed
-                },
-                'rates': {
-                    'response_rate': response_rate,
-                    'interview_rate': interview_rate,
-                    'offer_rate': offer_rate,
-                    'applications_sent': applications_sent
-                },
-                'by_source': sources,
-                'by_resume': resume_stats,
-                'timeline': sorted_weeks,
-                'followup_types': followup_types,
-                'avg_score': round(sum(j.get('baseline_score') or 0 for j in jobs) / len(jobs), 1) if jobs else 0
-            })
+            return jsonify(
+                {
+                    "funnel": {
+                        "total": total,
+                        "new": new_count,
+                        "interested": interested,
+                        "applied": applied,
+                        "interviewing": interviewing,
+                        "offers": offers,
+                        "rejected": rejected,
+                        "passed": passed,
+                    },
+                    "rates": {
+                        "response_rate": response_rate,
+                        "interview_rate": interview_rate,
+                        "offer_rate": offer_rate,
+                        "applications_sent": applications_sent,
+                    },
+                    "by_source": sources,
+                    "by_resume": resume_stats,
+                    "timeline": sorted_weeks,
+                    "followup_types": followup_types,
+                    "avg_score": (
+                        round(sum(j.get("baseline_score") or 0 for j in jobs) / len(jobs), 1)
+                        if jobs
+                        else 0
+                    ),
+                }
+            )
         except Exception as e:
             logger.error(f"Error getting analytics: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
         finally:
             conn.close()
 
@@ -5675,48 +5902,67 @@ def register_routes(app):
 
         conn = get_db()
         try:
-            jobs = [dict(row) for row in conn.execute(
-                """SELECT job_id, title, company, location, url, source, status,
+            jobs = [
+                dict(row)
+                for row in conn.execute(
+                    """SELECT job_id, title, company, location, url, source, status,
                           baseline_score, email_date, created_at, applied_date, notes
                    FROM jobs WHERE is_filtered = 0 ORDER BY created_at DESC"""
-            ).fetchall()]
+                ).fetchall()
+            ]
 
             # Create CSV in memory
             output = io.StringIO()
             writer = csv.writer(output)
 
             # Header row
-            writer.writerow([
-                'Job ID', 'Title', 'Company', 'Location', 'URL', 'Source',
-                'Status', 'Score', 'Email Date', 'Created', 'Applied Date', 'Notes'
-            ])
+            writer.writerow(
+                [
+                    "Job ID",
+                    "Title",
+                    "Company",
+                    "Location",
+                    "URL",
+                    "Source",
+                    "Status",
+                    "Score",
+                    "Email Date",
+                    "Created",
+                    "Applied Date",
+                    "Notes",
+                ]
+            )
 
             # Data rows
             for job in jobs:
-                writer.writerow([
-                    job.get('job_id', ''),
-                    job.get('title', ''),
-                    job.get('company', ''),
-                    job.get('location', ''),
-                    job.get('url', ''),
-                    job.get('source', ''),
-                    job.get('status', ''),
-                    job.get('baseline_score', ''),
-                    job.get('email_date', ''),
-                    job.get('created_at', ''),
-                    job.get('applied_date', ''),
-                    job.get('notes', '')
-                ])
+                writer.writerow(
+                    [
+                        job.get("job_id", ""),
+                        job.get("title", ""),
+                        job.get("company", ""),
+                        job.get("location", ""),
+                        job.get("url", ""),
+                        job.get("source", ""),
+                        job.get("status", ""),
+                        job.get("baseline_score", ""),
+                        job.get("email_date", ""),
+                        job.get("created_at", ""),
+                        job.get("applied_date", ""),
+                        job.get("notes", ""),
+                    ]
+                )
 
             output.seek(0)
             return Response(
                 output.getvalue(),
-                mimetype='text/csv',
-                headers={'Content-Disposition': f'attachment; filename=hammy_jobs_{datetime.now().strftime("%Y%m%d")}.csv'}
+                mimetype="text/csv",
+                headers={
+                    "Content-Disposition": f'attachment; filename=hammy_jobs_{datetime.now().strftime("%Y%m%d")}.csv'
+                },
             )
         except Exception as e:
             logger.error(f"Error exporting CSV: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
         finally:
             conn.close()
 
@@ -5742,8 +5988,8 @@ def register_routes(app):
             JSON: {success: true, archived_count: N}
         """
         data = request.get_json() or {}
-        job_ids = data.get('job_ids', [])
-        criteria = data.get('criteria', {})
+        job_ids = data.get("job_ids", [])
+        criteria = data.get("criteria", {})
 
         conn = get_db()
         try:
@@ -5751,10 +5997,10 @@ def register_routes(app):
 
             if job_ids:
                 # Archive specific jobs
-                placeholders = ','.join('?' * len(job_ids))
+                placeholders = ",".join("?" * len(job_ids))
                 conn.execute(
                     f"UPDATE jobs SET status = 'archived', updated_at = ? WHERE job_id IN ({placeholders})",
-                    [datetime.now().isoformat()] + job_ids
+                    [datetime.now().isoformat()] + job_ids,
                 )
                 archived_count = len(job_ids)
 
@@ -5763,12 +6009,14 @@ def register_routes(app):
                 query = "UPDATE jobs SET status = 'archived', updated_at = ? WHERE is_filtered = 0"
                 params = [datetime.now().isoformat()]
 
-                if criteria.get('status'):
+                if criteria.get("status"):
                     query += " AND status = ?"
-                    params.append(criteria['status'])
+                    params.append(criteria["status"])
 
-                if criteria.get('older_than_days'):
-                    cutoff = (datetime.now() - timedelta(days=criteria['older_than_days'])).isoformat()
+                if criteria.get("older_than_days"):
+                    cutoff = (
+                        datetime.now() - timedelta(days=criteria["older_than_days"])
+                    ).isoformat()
                     query += " AND created_at < ?"
                     params.append(cutoff)
 
@@ -5780,18 +6028,23 @@ def register_routes(app):
             # Gamification: Track archives
             if archived_count > 0:
                 try:
-                    from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                    from app.gamification import (
+                        update_daily_progress,
+                        check_achievements,
+                        init_gamification_tables,
+                    )
+
                     init_gamification_tables()
                     update_daily_progress("archive_old", archived_count)
                     check_achievements()
                 except Exception as e:
                     logger.debug(f"Gamification update failed: {e}")
 
-            return jsonify({'success': True, 'archived_count': archived_count})
+            return jsonify({"success": True, "archived_count": archived_count})
 
         except Exception as e:
             logger.error(f"Error bulk archiving: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
         finally:
             conn.close()
 
@@ -5806,22 +6059,23 @@ def register_routes(app):
         try:
             conn.execute(
                 "UPDATE jobs SET status = 'archived', updated_at = ? WHERE job_id = ?",
-                (datetime.now().isoformat(), job_id)
+                (datetime.now().isoformat(), job_id),
             )
             conn.commit()
 
             # Gamification: Track archive
             try:
                 from app.gamification import update_daily_progress, init_gamification_tables
+
                 init_gamification_tables()
                 update_daily_progress("archive_old")
             except Exception as e:
                 logger.debug(f"Gamification update failed: {e}")
 
-            return jsonify({'success': True})
+            return jsonify({"success": True})
         except Exception as e:
             logger.error(f"Error archiving job: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
         finally:
             conn.close()
 
@@ -5845,31 +6099,31 @@ def register_routes(app):
             JSON: {success: true, archived_count: N}
         """
         data = request.get_json() or {}
-        criteria = data.get('criteria', {})
-        archive_type = criteria.get('type', 'rejections')
-        older_than_days = criteria.get('older_than_days', 30)
+        criteria = data.get("criteria", {})
+        archive_type = criteria.get("type", "rejections")
+        older_than_days = criteria.get("older_than_days", 30)
 
         try:
             service = get_gmail_service()
             if not service:
-                return jsonify({'error': 'Gmail not connected'}), 400
+                return jsonify({"error": "Gmail not connected"}), 400
 
             archived_count = 0
-            cutoff_date = (datetime.now() - timedelta(days=older_than_days)).strftime('%Y/%m/%d')
+            cutoff_date = (datetime.now() - timedelta(days=older_than_days)).strftime("%Y/%m/%d")
 
             # Build search query based on type
-            if archive_type == 'rejections':
+            if archive_type == "rejections":
                 # Search for rejection emails
                 query = f'(subject:(unfortunately OR "not moving forward" OR "position has been filled" OR "decided not to proceed")) before:{cutoff_date}'
-            elif archive_type == 'old_alerts':
+            elif archive_type == "old_alerts":
                 # Search for old job alert emails
-                query = f'(from:(@linkedin.com OR @indeed.com OR @glassdoor.com OR @ziprecruiter.com) subject:(job OR jobs OR opportunity)) before:{cutoff_date}'
-            elif archive_type == 'all_processed':
+                query = f"(from:(@linkedin.com OR @indeed.com OR @glassdoor.com OR @ziprecruiter.com) subject:(job OR jobs OR opportunity)) before:{cutoff_date}"
+            elif archive_type == "all_processed":
                 # Get message IDs from our processed_emails table
                 conn = get_db()
                 processed = conn.execute(
                     "SELECT gmail_message_id FROM processed_emails WHERE processed_at < ?",
-                    ((datetime.now() - timedelta(days=older_than_days)).isoformat(),)
+                    ((datetime.now() - timedelta(days=older_than_days)).isoformat(),),
                 ).fetchall()
                 conn.close()
 
@@ -5878,43 +6132,39 @@ def register_routes(app):
                     try:
                         # Remove from inbox (archive)
                         service.users().messages().modify(
-                            userId='me',
-                            id=row['gmail_message_id'],
-                            body={'removeLabelIds': ['INBOX']}
+                            userId="me",
+                            id=row["gmail_message_id"],
+                            body={"removeLabelIds": ["INBOX"]},
                         ).execute()
                         archived_count += 1
                     except Exception as e:
                         logger.warning(f"Failed to archive email {row['gmail_message_id']}: {e}")
 
-                return jsonify({'success': True, 'archived_count': archived_count})
+                return jsonify({"success": True, "archived_count": archived_count})
             else:
-                return jsonify({'error': 'Invalid archive type'}), 400
+                return jsonify({"error": "Invalid archive type"}), 400
 
             # Search and archive
-            results = service.users().messages().list(
-                userId='me',
-                q=query,
-                maxResults=100
-            ).execute()
+            results = (
+                service.users().messages().list(userId="me", q=query, maxResults=100).execute()
+            )
 
-            messages = results.get('messages', [])
+            messages = results.get("messages", [])
 
             for msg in messages:
                 try:
                     service.users().messages().modify(
-                        userId='me',
-                        id=msg['id'],
-                        body={'removeLabelIds': ['INBOX']}
+                        userId="me", id=msg["id"], body={"removeLabelIds": ["INBOX"]}
                     ).execute()
                     archived_count += 1
                 except Exception as e:
                     logger.warning(f"Failed to archive email {msg['id']}: {e}")
 
-            return jsonify({'success': True, 'archived_count': archived_count})
+            return jsonify({"success": True, "archived_count": archived_count})
 
         except Exception as e:
             logger.error(f"Error archiving Gmail: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
 
     # ============================================================
     # Email Templates Routes
@@ -5933,10 +6183,10 @@ def register_routes(app):
         # Default templates if none exist
         default_templates = [
             {
-                'id': 'followup',
-                'name': 'Follow-up Email',
-                'subject': 'Following Up on My Application - {job_title}',
-                'body': '''Hi {hiring_manager},
+                "id": "followup",
+                "name": "Follow-up Email",
+                "subject": "Following Up on My Application - {job_title}",
+                "body": """Hi {hiring_manager},
 
 I hope this message finds you well. I wanted to follow up on my application for the {job_title} position at {company} that I submitted on {applied_date}.
 
@@ -5947,13 +6197,13 @@ Would you be able to provide any updates on the status of my application or the 
 Thank you for your time and consideration.
 
 Best regards,
-{your_name}'''
+{your_name}""",
             },
             {
-                'id': 'thank_you',
-                'name': 'Thank You (Post-Interview)',
-                'subject': 'Thank You - {job_title} Interview',
-                'body': '''Dear {interviewer_name},
+                "id": "thank_you",
+                "name": "Thank You (Post-Interview)",
+                "subject": "Thank You - {job_title} Interview",
+                "body": """Dear {interviewer_name},
 
 Thank you so much for taking the time to speak with me today about the {job_title} position at {company}.
 
@@ -5964,13 +6214,13 @@ I really enjoyed learning more about {topic_discussed} and am even more excited 
 Please don't hesitate to reach out if you need any additional information from me.
 
 Best regards,
-{your_name}'''
+{your_name}""",
             },
             {
-                'id': 'withdrawal',
-                'name': 'Application Withdrawal',
-                'subject': 'Withdrawing Application - {job_title}',
-                'body': '''Dear {hiring_manager},
+                "id": "withdrawal",
+                "name": "Application Withdrawal",
+                "subject": "Withdrawing Application - {job_title}",
+                "body": """Dear {hiring_manager},
 
 I hope this message finds you well. I am writing to respectfully withdraw my application for the {job_title} position at {company}.
 
@@ -5981,13 +6231,13 @@ I sincerely appreciate the time you and your team invested in reviewing my appli
 I hope our paths may cross again in the future, and I wish you and {company} continued success.
 
 Best regards,
-{your_name}'''
+{your_name}""",
             },
             {
-                'id': 'accept_offer',
-                'name': 'Accept Offer',
-                'subject': 'Accepting Offer - {job_title}',
-                'body': '''Dear {hiring_manager},
+                "id": "accept_offer",
+                "name": "Accept Offer",
+                "subject": "Accepting Offer - {job_title}",
+                "body": """Dear {hiring_manager},
 
 I am thrilled to formally accept the offer for the {job_title} position at {company}. Thank you for this wonderful opportunity.
 
@@ -5998,13 +6248,13 @@ I am excited to join the team and contribute to {company}'s success. Please let 
 Thank you again for this opportunity. I look forward to working with you and the team.
 
 Best regards,
-{your_name}'''
+{your_name}""",
             },
             {
-                'id': 'networking',
-                'name': 'Networking/Informational Interview',
-                'subject': 'Seeking Career Advice - {your_field}',
-                'body': '''Hi {contact_name},
+                "id": "networking",
+                "name": "Networking/Informational Interview",
+                "subject": "Seeking Career Advice - {your_field}",
+                "body": """Hi {contact_name},
 
 I hope this message finds you well. My name is {your_name}, and I came across your profile while researching professionals in {industry}.
 
@@ -6015,11 +6265,11 @@ Would you be open to a brief 15-20 minute call to share some insights about your
 Thank you for considering my request. I understand you're busy, so I appreciate any time you can spare.
 
 Best regards,
-{your_name}'''
-            }
+{your_name}""",
+            },
         ]
 
-        return jsonify({'templates': default_templates})
+        return jsonify({"templates": default_templates})
 
     @app.route("/api/email-templates/generate", methods=["POST"])
     def api_generate_email():
@@ -6037,59 +6287,54 @@ Best regards,
             JSON: {subject: str, body: str}
         """
         data = request.get_json() or {}
-        template_id = data.get('template_id')
-        job_id = data.get('job_id')
-        variables = data.get('variables', {})
+        template_id = data.get("template_id")
+        job_id = data.get("job_id")
+        variables = data.get("variables", {})
 
         if not template_id:
-            return jsonify({'error': 'template_id required'}), 400
+            return jsonify({"error": "template_id required"}), 400
 
         conn = get_db()
         try:
             # Get job details if provided
             job = None
             if job_id:
-                job = conn.execute(
-                    "SELECT * FROM jobs WHERE job_id = ?",
-                    (job_id,)
-                ).fetchone()
+                job = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
                 if job:
                     job = dict(job)
 
             # Get template
             templates_response = api_get_email_templates()
-            templates = templates_response.get_json()['templates']
-            template = next((t for t in templates if t['id'] == template_id), None)
+            templates = templates_response.get_json()["templates"]
+            template = next((t for t in templates if t["id"] == template_id), None)
 
             if not template:
-                return jsonify({'error': 'Template not found'}), 404
+                return jsonify({"error": "Template not found"}), 404
 
             # Fill in variables
-            subject = template['subject']
-            body = template['body']
+            subject = template["subject"]
+            body = template["body"]
 
             # Auto-fill from job
             if job:
-                subject = subject.replace('{job_title}', job.get('title') or '')
-                subject = subject.replace('{company}', job.get('company') or '')
-                body = body.replace('{job_title}', job.get('title') or '')
-                body = body.replace('{company}', job.get('company') or '')
-                body = body.replace('{applied_date}', job.get('applied_date') or job.get('email_date') or '')
+                subject = subject.replace("{job_title}", job.get("title") or "")
+                subject = subject.replace("{company}", job.get("company") or "")
+                body = body.replace("{job_title}", job.get("title") or "")
+                body = body.replace("{company}", job.get("company") or "")
+                body = body.replace(
+                    "{applied_date}", job.get("applied_date") or job.get("email_date") or ""
+                )
 
             # Fill in provided variables
             for key, value in variables.items():
-                subject = subject.replace(f'{{{key}}}', str(value))
-                body = body.replace(f'{{{key}}}', str(value))
+                subject = subject.replace(f"{{{key}}}", str(value))
+                body = body.replace(f"{{{key}}}", str(value))
 
-            return jsonify({
-                'subject': subject,
-                'body': body,
-                'template_name': template['name']
-            })
+            return jsonify({"subject": subject, "body": body, "template_name": template["name"]})
 
         except Exception as e:
             logger.error(f"Error generating email: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
         finally:
             conn.close()
 
@@ -6112,17 +6357,14 @@ Best regards,
         """
         conn = get_db()
         try:
-            job = conn.execute(
-                "SELECT * FROM jobs WHERE job_id = ?",
-                (job_id,)
-            ).fetchone()
+            job = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
 
             if not job:
-                return jsonify({'error': 'Job not found'}), 404
+                return jsonify({"error": "Job not found"}), 404
 
             job = dict(job)
-            company = job.get('company') or 'Unknown Company'
-            title = job.get('title') or 'Unknown Position'
+            company = job.get("company") or "Unknown Company"
+            title = job.get("title") or "Unknown Position"
 
             # Generate AI suggestions for finding hiring manager
             try:
@@ -6130,9 +6372,10 @@ Best regards,
                 response = client.messages.create(
                     model="claude-sonnet-4-20250514",
                     max_tokens=1000,
-                    messages=[{
-                        "role": "user",
-                        "content": f"""I'm applying for a {title} position at {company}. Help me identify who the hiring manager might be and how to find them.
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": f"""I'm applying for a {title} position at {company}. Help me identify who the hiring manager might be and how to find them.
 
 Please provide:
 1. The likely job titles of people who would be the hiring manager for this role (e.g., "Engineering Manager", "VP of Engineering")
@@ -6144,8 +6387,9 @@ Format your response as JSON with these fields:
 - likely_titles: array of job titles
 - linkedin_search: string with search query
 - tips: array of tips
-- outreach_template: string with message template"""
-                    }]
+- outreach_template: string with message template""",
+                        }
+                    ],
                 )
 
                 # Parse AI response
@@ -6153,62 +6397,62 @@ Format your response as JSON with these fields:
 
                 # Try to extract JSON from the response
                 import re
-                json_match = re.search(r'\{[\s\S]*\}', response_text)
+
+                json_match = re.search(r"\{[\s\S]*\}", response_text)
                 if json_match:
                     result = json.loads(json_match.group())
                 else:
                     # Fallback with basic suggestions
                     result = {
-                        'likely_titles': [
-                            f'{title.split()[0]} Manager',
-                            'Hiring Manager',
-                            'Talent Acquisition',
-                            'HR Manager'
+                        "likely_titles": [
+                            f"{title.split()[0]} Manager",
+                            "Hiring Manager",
+                            "Talent Acquisition",
+                            "HR Manager",
                         ],
-                        'linkedin_search': f'"{company}" hiring manager {title.split()[0]}',
-                        'tips': [
+                        "linkedin_search": f'"{company}" hiring manager {title.split()[0]}',
+                        "tips": [
                             'Look for people with "Manager" or "Director" in their title in the relevant department',
-                            'Check the company\'s LinkedIn page for employees',
-                            'Look at job posting for any mentioned contacts'
+                            "Check the company's LinkedIn page for employees",
+                            "Look at job posting for any mentioned contacts",
                         ],
-                        'outreach_template': f'Hi [Name], I recently applied for the {title} position at {company} and wanted to connect...'
+                        "outreach_template": f"Hi [Name], I recently applied for the {title} position at {company} and wanted to connect...",
                     }
 
-                return jsonify({
-                    'success': True,
-                    'company': company,
-                    'job_title': title,
-                    'suggestions': result
-                })
+                return jsonify(
+                    {"success": True, "company": company, "job_title": title, "suggestions": result}
+                )
 
             except Exception as ai_error:
                 logger.warning(f"AI hiring manager lookup failed: {ai_error}")
                 # Return basic suggestions without AI
-                return jsonify({
-                    'success': True,
-                    'company': company,
-                    'job_title': title,
-                    'suggestions': {
-                        'likely_titles': [
-                            'Hiring Manager',
-                            'Recruiter',
-                            'HR Manager',
-                            'Department Head'
-                        ],
-                        'linkedin_search': f'"{company}" recruiter OR "hiring manager"',
-                        'tips': [
-                            'Search LinkedIn for employees at the company',
-                            'Look for people in HR or Talent Acquisition',
-                            'Check the job posting for contact information',
-                            'Visit the company\'s careers page for recruiter contacts'
-                        ],
-                        'outreach_template': f'Hi, I recently applied for the {title} position at {company} and wanted to introduce myself and express my enthusiasm for the role.'
+                return jsonify(
+                    {
+                        "success": True,
+                        "company": company,
+                        "job_title": title,
+                        "suggestions": {
+                            "likely_titles": [
+                                "Hiring Manager",
+                                "Recruiter",
+                                "HR Manager",
+                                "Department Head",
+                            ],
+                            "linkedin_search": f'"{company}" recruiter OR "hiring manager"',
+                            "tips": [
+                                "Search LinkedIn for employees at the company",
+                                "Look for people in HR or Talent Acquisition",
+                                "Check the job posting for contact information",
+                                "Visit the company's careers page for recruiter contacts",
+                            ],
+                            "outreach_template": f"Hi, I recently applied for the {title} position at {company} and wanted to introduce myself and express my enthusiasm for the role.",
+                        },
                     }
-                })
+                )
 
         except Exception as e:
             logger.error(f"Error finding hiring manager: {e}")
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
         finally:
             conn.close()
 
@@ -6235,12 +6479,14 @@ Format your response as JSON with these fields:
                     log_type = parts[0] if parts else "unknown"
 
                     stat = log_file.stat()
-                    logs.append({
-                        "name": log_file.name,
-                        "type": log_type,
-                        "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
-                        "size_kb": round(stat.st_size / 1024, 1)
-                    })
+                    logs.append(
+                        {
+                            "name": log_file.name,
+                            "type": log_type,
+                            "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                            "size_kb": round(stat.st_size / 1024, 1),
+                        }
+                    )
 
             return jsonify({"logs": logs[:50]})  # Return last 50 logs
         except Exception as e:
@@ -6269,11 +6515,9 @@ Format your response as JSON with these fields:
             with open(log_path, "r") as f:
                 content = f.read()
 
-            return jsonify({
-                "name": log_name,
-                "content": content,
-                "lines": len(content.split("\n"))
-            })
+            return jsonify(
+                {"name": log_name, "content": content, "lines": len(content.split("\n"))}
+            )
         except Exception as e:
             logger.error(f"Error reading log: {e}")
             return jsonify({"error": str(e)}), 500
@@ -6322,10 +6566,9 @@ Format your response as JSON with these fields:
         limit = request.args.get("limit", 20, type=int)
         tracker = get_error_tracker()
 
-        return jsonify({
-            "errors": tracker.get_recent_errors(limit),
-            "summary": tracker.get_error_summary()
-        })
+        return jsonify(
+            {"errors": tracker.get_recent_errors(limit), "summary": tracker.get_error_summary()}
+        )
 
     @app.route("/api/errors/clear", methods=["POST"])
     def clear_errors():
@@ -6460,10 +6703,7 @@ Format your response as JSON with these fields:
         try:
             init_gamification_tables()
             newly_unlocked = check_achievements()
-            return jsonify({
-                "newly_unlocked": newly_unlocked,
-                "count": len(newly_unlocked)
-            })
+            return jsonify({"newly_unlocked": newly_unlocked, "count": len(newly_unlocked)})
         except Exception as e:
             logger.error(f"Error checking achievements: {e}")
             return jsonify({"error": str(e)}), 500
@@ -6539,12 +6779,7 @@ Format your response as JSON with these fields:
             params.append(reason)
 
         # Sorting
-        sort_map = {
-            "date": "created_at",
-            "score": "score",
-            "company": "company",
-            "title": "title"
-        }
+        sort_map = {"date": "created_at", "score": "score", "company": "company", "title": "title"}
         sort_field = sort_map.get(sort, "created_at")
         order_dir = "DESC" if order.lower() == "desc" else "ASC"
         query += f" ORDER BY {sort_field} {order_dir}"
@@ -6578,13 +6813,15 @@ Format your response as JSON with these fields:
 
         conn.close()
 
-        return jsonify({
-            "jobs": jobs,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "reason_breakdown": {r["archive_reason"] or "manual": r["count"] for r in reasons}
-        })
+        return jsonify(
+            {
+                "jobs": jobs,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "reason_breakdown": {r["archive_reason"] or "manual": r["count"] for r in reasons},
+            }
+        )
 
     @app.route("/api/jobs/auto-archive", methods=["POST"])
     def auto_archive_jobs():
@@ -6611,11 +6848,7 @@ Format your response as JSON with these fields:
         conn = get_db()
         conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
 
-        archived = {
-            "no_description": [],
-            "old": [],
-            "low_score": []
-        }
+        archived = {"no_description": [], "old": [], "low_score": []}
 
         # Archive jobs without descriptions
         if archive_no_desc:
@@ -6631,42 +6864,48 @@ Format your response as JSON with these fields:
                 if not dry_run:
                     conn.execute(
                         "UPDATE jobs SET status = 'passed', archive_reason = 'no_description' WHERE id = ?",
-                        (job["id"],)
+                        (job["id"],),
                     )
 
         # Archive old jobs
         if archive_old_days:
             cutoff = (datetime.now() - timedelta(days=archive_old_days)).isoformat()
-            old_jobs = conn.execute("""
+            old_jobs = conn.execute(
+                """
                 SELECT id, title, company, status, created_at FROM jobs
                 WHERE created_at < ?
                 AND status IN ('new', 'interested')
                 AND is_filtered = 0
-            """, (cutoff,)).fetchall()
+            """,
+                (cutoff,),
+            ).fetchall()
 
             for job in old_jobs:
                 archived["old"].append(job)
                 if not dry_run:
                     conn.execute(
                         "UPDATE jobs SET status = 'passed', archive_reason = 'old' WHERE id = ?",
-                        (job["id"],)
+                        (job["id"],),
                     )
 
         # Archive low score jobs
         if archive_low_score:
-            low_jobs = conn.execute("""
+            low_jobs = conn.execute(
+                """
                 SELECT id, title, company, score FROM jobs
                 WHERE score > 0 AND score < ?
                 AND status IN ('new', 'interested')
                 AND is_filtered = 0
-            """, (archive_low_score,)).fetchall()
+            """,
+                (archive_low_score,),
+            ).fetchall()
 
             for job in low_jobs:
                 archived["low_score"].append(job)
                 if not dry_run:
                     conn.execute(
                         "UPDATE jobs SET status = 'passed', archive_reason = 'low_quality' WHERE id = ?",
-                        (job["id"],)
+                        (job["id"],),
                     )
 
         if not dry_run:
@@ -6679,19 +6918,26 @@ Format your response as JSON with these fields:
         # Gamification: Track archives (if not dry run)
         if not dry_run and total_archived > 0:
             try:
-                from app.gamification import update_daily_progress, check_achievements, init_gamification_tables
+                from app.gamification import (
+                    update_daily_progress,
+                    check_achievements,
+                    init_gamification_tables,
+                )
+
                 init_gamification_tables()
                 update_daily_progress("archive_old", total_archived)
                 check_achievements()
             except Exception as e:
                 logger.debug(f"Gamification update failed: {e}")
 
-        return jsonify({
-            "dry_run": dry_run,
-            "archived": archived,
-            "total_archived": total_archived,
-            "by_reason": {k: len(v) for k, v in archived.items()}
-        })
+        return jsonify(
+            {
+                "dry_run": dry_run,
+                "archived": archived,
+                "total_archived": total_archived,
+                "by_reason": {k: len(v) for k, v in archived.items()},
+            }
+        )
 
     @app.route("/api/jobs/<job_id>/unarchive", methods=["POST"])
     def unarchive_job(job_id):
@@ -6711,8 +6957,7 @@ Format your response as JSON with these fields:
 
         conn = get_db()
         conn.execute(
-            "UPDATE jobs SET status = ?, archive_reason = NULL WHERE id = ?",
-            (new_status, job_id)
+            "UPDATE jobs SET status = ?, archive_reason = NULL WHERE id = ?", (new_status, job_id)
         )
         conn.commit()
         conn.close()
@@ -6747,11 +6992,14 @@ Format your response as JSON with these fields:
         conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
 
         # Get processed email IDs from scan_history
-        processed = conn.execute("""
+        processed = conn.execute(
+            """
             SELECT DISTINCT email_id, source, processed_at
             FROM processed_emails
             WHERE processed_at >= date('now', ?)
-        """, (f"-{days} days",)).fetchall()
+        """,
+            (f"-{days} days",),
+        ).fetchall()
 
         processed_ids = set(p["email_id"] for p in processed)
 
@@ -6765,22 +7013,27 @@ Format your response as JSON with these fields:
             source_breakdown[src]["email_ids"].append(p["email_id"])
 
         # Get total jobs from each source
-        jobs_by_source = conn.execute("""
+        jobs_by_source = conn.execute(
+            """
             SELECT source, COUNT(*) as count
             FROM jobs
             WHERE created_at >= date('now', ?)
             GROUP BY source
-        """, (f"-{days} days",)).fetchall()
+        """,
+            (f"-{days} days",),
+        ).fetchall()
 
         conn.close()
 
-        return jsonify({
-            "days_checked": days,
-            "processed_email_count": len(processed_ids),
-            "source_breakdown": source_breakdown,
-            "jobs_by_source": {j["source"] or "unknown": j["count"] for j in jobs_by_source},
-            "message": f"Analyzed email processing for the last {days} days"
-        })
+        return jsonify(
+            {
+                "days_checked": days,
+                "processed_email_count": len(processed_ids),
+                "source_breakdown": source_breakdown,
+                "jobs_by_source": {j["source"] or "unknown": j["count"] for j in jobs_by_source},
+                "message": f"Analyzed email processing for the last {days} days",
+            }
+        )
 
     @app.route("/api/emails/reprocess", methods=["POST"])
     def reprocess_emails():
@@ -6811,25 +7064,24 @@ Format your response as JSON with these fields:
                 conn.execute("DELETE FROM processed_emails WHERE email_id = ?", (eid,))
                 deleted_count += 1
         elif source:
-            result = conn.execute(
-                "DELETE FROM processed_emails WHERE source = ?",
-                (source,)
-            )
+            result = conn.execute("DELETE FROM processed_emails WHERE source = ?", (source,))
             deleted_count = result.rowcount
         elif days:
             result = conn.execute(
                 "DELETE FROM processed_emails WHERE processed_at >= date('now', ?)",
-                (f"-{days} days",)
+                (f"-{days} days",),
             )
             deleted_count = result.rowcount
 
         conn.commit()
         conn.close()
 
-        return jsonify({
-            "success": True,
-            "emails_marked_for_reprocessing": deleted_count,
-            "message": "Run a new scan to reprocess these emails"
-        })
+        return jsonify(
+            {
+                "success": True,
+                "emails_marked_for_reprocessing": deleted_count,
+                "message": "Run a new scan to reprocess these emails",
+            }
+        )
 
     return app

@@ -3,8 +3,10 @@ Job Analyzer - Extracts experience requirements and analyzes candidate fit
 
 This module provides functions to:
 1. Extract specific experience requirements from job descriptions
-2. Analyze gaps between candidate resume and job requirements
-3. Identify pros/strengths that match job requirements
+2. Extract required and preferred skills
+3. Analyze gaps between candidate resume and job requirements
+4. Identify pros/strengths that match job requirements
+5. Create tech stack overlap analysis
 """
 
 import re
@@ -13,6 +15,397 @@ import logging
 from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
+
+
+# Comprehensive list of tech skills to detect
+TECH_SKILLS = {
+    "languages": [
+        "python",
+        "javascript",
+        "typescript",
+        "java",
+        "c++",
+        "c#",
+        "go",
+        "golang",
+        "rust",
+        "ruby",
+        "php",
+        "swift",
+        "kotlin",
+        "scala",
+        "r",
+        "sql",
+        "bash",
+        "perl",
+        "lua",
+        "haskell",
+        "elixir",
+        "clojure",
+        "dart",
+        "objective-c",
+    ],
+    "frontend": [
+        "react",
+        "angular",
+        "vue",
+        "vue.js",
+        "next.js",
+        "nextjs",
+        "nuxt",
+        "svelte",
+        "redux",
+        "mobx",
+        "tailwind",
+        "tailwindcss",
+        "css",
+        "sass",
+        "scss",
+        "less",
+        "html",
+        "html5",
+        "webpack",
+        "vite",
+        "babel",
+        "jquery",
+        "bootstrap",
+        "material-ui",
+        "mui",
+        "chakra",
+        "styled-components",
+        "emotion",
+    ],
+    "backend": [
+        "node",
+        "node.js",
+        "nodejs",
+        "express",
+        "express.js",
+        "django",
+        "flask",
+        "fastapi",
+        "spring",
+        "spring boot",
+        "rails",
+        "ruby on rails",
+        "laravel",
+        ".net",
+        "asp.net",
+        "nest.js",
+        "nestjs",
+        "koa",
+        "hapi",
+        "gin",
+        "echo",
+        "fiber",
+        "actix",
+        "rocket",
+    ],
+    "cloud": [
+        "aws",
+        "amazon web services",
+        "azure",
+        "gcp",
+        "google cloud",
+        "cloud",
+        "lambda",
+        "ec2",
+        "s3",
+        "cloudfront",
+        "api gateway",
+        "cloudwatch",
+        "ecs",
+        "eks",
+        "fargate",
+        "cloudformation",
+        "cdk",
+    ],
+    "devops": [
+        "kubernetes",
+        "k8s",
+        "docker",
+        "terraform",
+        "ansible",
+        "puppet",
+        "chef",
+        "jenkins",
+        "ci/cd",
+        "github actions",
+        "gitlab ci",
+        "circleci",
+        "travis",
+        "argocd",
+        "helm",
+        "prometheus",
+        "grafana",
+        "datadog",
+        "splunk",
+    ],
+    "databases": [
+        "postgresql",
+        "postgres",
+        "mysql",
+        "mariadb",
+        "mongodb",
+        "redis",
+        "elasticsearch",
+        "dynamodb",
+        "cassandra",
+        "sqlite",
+        "oracle",
+        "sql server",
+        "neo4j",
+        "couchdb",
+        "firebase",
+        "supabase",
+    ],
+    "data": [
+        "spark",
+        "hadoop",
+        "kafka",
+        "airflow",
+        "dbt",
+        "snowflake",
+        "redshift",
+        "bigquery",
+        "databricks",
+        "pandas",
+        "numpy",
+        "etl",
+        "data pipeline",
+    ],
+    "ai_ml": [
+        "machine learning",
+        "ml",
+        "deep learning",
+        "tensorflow",
+        "pytorch",
+        "keras",
+        "scikit-learn",
+        "sklearn",
+        "nlp",
+        "computer vision",
+        "llm",
+        "openai",
+        "huggingface",
+        "langchain",
+        "rag",
+    ],
+    "tools": [
+        "git",
+        "github",
+        "gitlab",
+        "bitbucket",
+        "jira",
+        "confluence",
+        "slack",
+        "figma",
+        "postman",
+        "swagger",
+        "openapi",
+        "vscode",
+        "vim",
+        "linux",
+        "unix",
+        "macos",
+        "windows",
+    ],
+    "concepts": [
+        "rest",
+        "rest api",
+        "graphql",
+        "grpc",
+        "microservices",
+        "serverless",
+        "event-driven",
+        "message queue",
+        "websocket",
+        "oauth",
+        "jwt",
+        "testing",
+        "tdd",
+        "unit testing",
+        "integration testing",
+        "e2e",
+        "agile",
+        "scrum",
+        "kanban",
+    ],
+}
+
+
+def extract_all_skills_from_text(text: str) -> Dict[str, List[str]]:
+    """Extract all tech skills found in text, categorized."""
+    if not text:
+        return {}
+
+    text_lower = text.lower()
+    found_skills = {}
+
+    for category, skills in TECH_SKILLS.items():
+        category_skills = []
+        for skill in skills:
+            # Check for skill presence (word boundary aware for short skills)
+            if len(skill) <= 3:
+                # Use word boundary for short skills like "go", "r", "sql"
+                pattern = r"\b" + re.escape(skill) + r"\b"
+                if re.search(pattern, text_lower):
+                    category_skills.append(skill)
+            else:
+                if skill in text_lower:
+                    category_skills.append(skill)
+
+        if category_skills:
+            found_skills[category] = category_skills
+
+    return found_skills
+
+
+def extract_required_skills(job_description: str) -> Dict[str, Any]:
+    """
+    Extract required and preferred skills from a job description.
+
+    Returns:
+        Dictionary with:
+        - required: List of required skills
+        - preferred: List of preferred/nice-to-have skills
+        - all_skills: All skills mentioned categorized
+    """
+    if not job_description:
+        return {"required": [], "preferred": [], "all_skills": {}}
+
+    text_lower = job_description.lower()
+
+    # Find all skills in the document
+    all_skills = extract_all_skills_from_text(job_description)
+
+    # Try to identify required vs preferred sections
+    required_section = ""
+    preferred_section = ""
+
+    # Common section headers
+    required_patterns = [
+        r"(?:required|minimum|must have|essential)[\s\w]*(?:qualifications?|requirements?|skills?|experience)?:?\s*([\s\S]*?)(?=(?:preferred|nice to have|bonus|desired|plus|\n\n|$))",
+        r"what you(?:'ll)? need:?\s*([\s\S]*?)(?=(?:what we|preferred|bonus|\n\n|$))",
+        r"requirements?:?\s*([\s\S]*?)(?=(?:preferred|bonus|benefits|\n\n|$))",
+    ]
+
+    preferred_patterns = [
+        r"(?:preferred|nice to have|bonus|desired|plus)[\s\w]*(?:qualifications?|requirements?|skills?)?:?\s*([\s\S]*?)(?=(?:benefits|about|equal opportunity|\n\n|$))",
+    ]
+
+    for pattern in required_patterns:
+        match = re.search(pattern, text_lower, re.IGNORECASE)
+        if match:
+            required_section = match.group(1)
+            break
+
+    for pattern in preferred_patterns:
+        match = re.search(pattern, text_lower, re.IGNORECASE)
+        if match:
+            preferred_section = match.group(1)
+            break
+
+    # Extract skills from each section
+    required_skills_dict = (
+        extract_all_skills_from_text(required_section) if required_section else {}
+    )
+    preferred_skills_dict = (
+        extract_all_skills_from_text(preferred_section) if preferred_section else {}
+    )
+
+    # Flatten and dedupe
+    required_skills = []
+    for skills in required_skills_dict.values():
+        required_skills.extend(skills)
+    required_skills = list(set(required_skills))
+
+    preferred_skills = []
+    for skills in preferred_skills_dict.values():
+        preferred_skills.extend(skills)
+    preferred_skills = list(set(s for s in preferred_skills if s not in required_skills))
+
+    # If we couldn't find sections, use all skills as required
+    if not required_skills and not preferred_skills:
+        for skills in all_skills.values():
+            required_skills.extend(skills)
+        required_skills = list(set(required_skills))
+
+    return {
+        "required": sorted(required_skills),
+        "preferred": sorted(preferred_skills),
+        "all_skills": all_skills,
+    }
+
+
+def create_tech_stack_overlap(job_description: str, resume_text: str) -> Dict[str, Any]:
+    """
+    Create a detailed tech stack overlap analysis.
+
+    Returns:
+        Dictionary with:
+        - matched: Skills in both job and resume (categorized)
+        - missing: Skills in job but not resume (categorized)
+        - extra: Skills in resume but not in job (could be valuable)
+        - match_percentage: Overall match percentage
+        - summary: Quick summary stats
+    """
+    job_skills = extract_all_skills_from_text(job_description)
+    resume_skills = extract_all_skills_from_text(resume_text)
+
+    matched = {}
+    missing = {}
+    extra = {}
+
+    all_categories = set(job_skills.keys()) | set(resume_skills.keys())
+
+    total_job_skills = 0
+    total_matched = 0
+
+    for category in all_categories:
+        job_cat_skills = set(job_skills.get(category, []))
+        resume_cat_skills = set(resume_skills.get(category, []))
+
+        cat_matched = job_cat_skills & resume_cat_skills
+        cat_missing = job_cat_skills - resume_cat_skills
+        cat_extra = resume_cat_skills - job_cat_skills
+
+        if cat_matched:
+            matched[category] = sorted(list(cat_matched))
+            total_matched += len(cat_matched)
+        if cat_missing:
+            missing[category] = sorted(list(cat_missing))
+        if cat_extra:
+            extra[category] = sorted(list(cat_extra))
+
+        total_job_skills += len(job_cat_skills)
+
+    # Calculate match percentage
+    if total_job_skills > 0:
+        match_percentage = int((total_matched / total_job_skills) * 100)
+    else:
+        match_percentage = 0
+
+    # Flatten for summary
+    all_matched = []
+    all_missing = []
+    for skills in matched.values():
+        all_matched.extend(skills)
+    for skills in missing.values():
+        all_missing.extend(skills)
+
+    return {
+        "matched": matched,
+        "missing": missing,
+        "extra": extra,
+        "match_percentage": match_percentage,
+        "summary": {
+            "matched_count": len(all_matched),
+            "missing_count": len(all_missing),
+            "top_matched": all_matched[:10],
+            "critical_missing": all_missing[:5],
+        },
+    }
 
 
 def extract_experience_requirements(job_description: str) -> List[Dict[str, Any]]:

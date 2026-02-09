@@ -181,6 +181,45 @@ def enrich_job(job_id: str, force: bool = False) -> Dict[str, Any]:
         conn.close()
 
 
+def is_job_data_insufficient(company: str, title: str) -> Optional[str]:
+    """
+    Check if job data is too poor for enrichment (would waste API credits).
+
+    Returns None if data is sufficient, or a reason string if insufficient.
+    """
+    # Check for unknown/missing company
+    company_lower = (company or "").lower().strip()
+    if not company_lower or company_lower in ("unknown", "n/a", "na", "none", ""):
+        return "company is unknown"
+
+    # Check for generic/malformed titles
+    title_lower = (title or "").lower().strip()
+    if not title_lower or len(title_lower) < 5:
+        return "title is too short or missing"
+
+    # Check for "Position at X" pattern (cold application placeholder)
+    if title_lower.startswith("position at "):
+        return "placeholder title from cold application"
+
+    # Check for malformed titles like "Senior at Cloud Engineer Teradata"
+    # Pattern: word followed by "at" early in title suggests parsing error
+    import re
+
+    if re.match(r"^(senior|junior|mid|lead|staff|principal)\s+at\s+", title_lower):
+        return "malformed title (seniority at company pattern)"
+
+    # Check for company name in title (often means malformed parsing)
+    # e.g., "Software Engineer Jobs via Dice" or "DevOps Engineer Viasat"
+    if company_lower in title_lower and "at" not in title_lower:
+        return "company name appears embedded in title"
+
+    # Check for aggregator-only entries (title contains source name)
+    if any(src in title_lower for src in ["jobs via dice", "via dice", "via linkedin"]):
+        return "aggregator placeholder title"
+
+    return None  # Data is sufficient
+
+
 def enrich_job_data(
     job_id: str, company: str, title: str, conn: Optional[sqlite3.Connection] = None
 ) -> Dict[str, Any]:
@@ -196,6 +235,18 @@ def enrich_job_data(
     Returns:
         Dictionary with enrichment results
     """
+    # Quick check for insufficient data - skip enrichment to save API credits
+    skip_reason = is_job_data_insufficient(company, title)
+    if skip_reason:
+        logger.info(f"Skipping enrichment for job {job_id}: {skip_reason}")
+        return {
+            "success": False,
+            "job_id": job_id,
+            "enriched_fields": [],
+            "enrichment_status": "skipped_bad_data",
+            "error": f"Insufficient data for enrichment: {skip_reason}",
+        }
+
     should_close = False
     if conn is None:
         conn = get_db()

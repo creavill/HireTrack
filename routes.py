@@ -1444,12 +1444,12 @@ def register_routes(app):
                     conn.commit()
                     continue
 
-                # Store new job as 'pending'
+                # Store new job as 'pending' - set BOTH score and baseline_score to avoid re-scoring
                 conn.execute(
                     """INSERT INTO jobs (job_id, title, company, location, url, source, raw_text,
-                                       baseline_score, created_at, updated_at, email_date,
+                                       score, baseline_score, created_at, updated_at, email_date,
                                        is_filtered, enrichment_status)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')""",
                     (
                         job["job_id"],
                         job["title"],
@@ -1458,6 +1458,7 @@ def register_routes(app):
                         job["url"],
                         job["source"],
                         job["raw_text"],
+                        baseline_score,
                         baseline_score,
                         job["created_at"],
                         datetime.now().isoformat(),
@@ -1521,9 +1522,18 @@ def register_routes(app):
                         else:
                             error_msg = enrich_result.get("error", "Unknown error")
                             status = enrich_result.get("enrichment_status", "unknown")
-                            write_log(log_file, f"    [FAIL] Enrichment failed:")
-                            write_log(log_file, f"        - Status: {status}")
-                            write_log(log_file, f"        - Error: {error_msg}")
+                            # Mark jobs with bad data so we don't retry enrichment
+                            if status == "skipped_bad_data":
+                                conn.execute(
+                                    "UPDATE jobs SET enrichment_status = 'skipped', notes = ? WHERE job_id = ?",
+                                    (error_msg, job_id),
+                                )
+                                conn.commit()
+                                write_log(log_file, f"    [SKIP] Bad data: {error_msg}")
+                            else:
+                                write_log(log_file, f"    [FAIL] Enrichment failed:")
+                                write_log(log_file, f"        - Status: {status}")
+                                write_log(log_file, f"        - Error: {error_msg}")
                     except Exception as e:
                         write_log(log_file, f"    [ERROR] Exception during enrichment: {str(e)}")
                         results["errors"].append(f"Enrich {job_id}: {str(e)}")
@@ -1534,27 +1544,26 @@ def register_routes(app):
             # === PHASE 4: SCORE ENRICHED JOBS ===
             write_log(log_file, "\n--- PHASE 4: SCORING JOBS (AI) ---")
 
-            # Get jobs that are enriched but not yet scored
-            to_score = conn.execute(
-                """SELECT * FROM jobs
-                   WHERE enrichment_status IN ('pending', 'enriched')
+            # Only re-score jobs that were successfully enriched with new description data
+            # Jobs that failed enrichment keep their baseline score from Phase 2
+            to_score = conn.execute("""SELECT * FROM jobs
+                   WHERE enrichment_status = 'enriched'
                    AND is_filtered = 0
-                   AND (score IS NULL OR score = 0 OR baseline_score IS NULL OR baseline_score = 0)"""
-            ).fetchall()
+                   AND full_description IS NOT NULL
+                   AND length(full_description) > 100""").fetchall()
 
-            write_log(log_file, f"Jobs to score: {len(to_score)}")
+            write_log(log_file, f"Jobs to re-score (enriched with description): {len(to_score)}")
 
             for job_row in to_score:
                 job = dict(job_row)
-                write_log(log_file, f"  Scoring: {job['title'][:40]}")
+                write_log(log_file, f"  Re-scoring: {job['title'][:40]}")
 
                 try:
                     _, final_score, reason = ai_filter_and_score(job, resume_text)
                     conn.execute(
-                        """UPDATE jobs SET score = ?, baseline_score = ?, notes = ?,
+                        """UPDATE jobs SET score = ?, notes = ?,
                            enrichment_status = 'scored', updated_at = ? WHERE job_id = ?""",
                         (
-                            final_score,
                             final_score,
                             reason,
                             datetime.now().isoformat(),
@@ -1563,10 +1572,21 @@ def register_routes(app):
                     )
                     conn.commit()
                     results["jobs_scored"] += 1
-                    write_log(log_file, f"    ✓ Score: {final_score}")
+                    write_log(
+                        log_file,
+                        f"    ✓ Score: {final_score} (was: {job.get('baseline_score', 'N/A')})",
+                    )
                 except Exception as e:
                     write_log(log_file, f"    ✗ Error: {str(e)}")
                     results["errors"].append(f"Score {job['job_id']}: {str(e)}")
+
+            # Mark remaining pending/enriched jobs as scored (they keep their baseline score)
+            remaining = conn.execute("""UPDATE jobs SET enrichment_status = 'scored'
+                   WHERE enrichment_status IN ('pending', 'enriched', 'skipped')
+                   AND is_filtered = 0""").rowcount
+            conn.commit()
+            if remaining > 0:
+                write_log(log_file, f"  Marked {remaining} jobs as scored (kept baseline scores)")
 
             # === PHASE 5: STORE FOLLOW-UPS ===
             write_log(log_file, "\n--- PHASE 5: STORING FOLLOW-UPS ---")
@@ -1632,6 +1652,40 @@ def register_routes(app):
                             )
                             conn.commit()
 
+            # === PHASE 6: AUTO-ARCHIVE OLD JOBS ===
+            write_log(log_file, "\n--- PHASE 6: AUTO-ARCHIVING OLD JOBS ---")
+
+            # Archive jobs older than 2 weeks that are still in 'new' status
+            two_weeks_ago = (datetime.now() - timedelta(days=14)).isoformat()
+            old_jobs = conn.execute(
+                """SELECT job_id, title, company, created_at FROM jobs
+                   WHERE status = 'new'
+                   AND is_filtered = 0
+                   AND created_at < ?
+                   ORDER BY created_at ASC""",
+                (two_weeks_ago,),
+            ).fetchall()
+
+            results["jobs_auto_archived"] = 0
+            if old_jobs:
+                write_log(
+                    log_file, f"Found {len(old_jobs)} jobs older than 2 weeks to auto-archive"
+                )
+                for old_job in old_jobs:
+                    conn.execute(
+                        """UPDATE jobs SET status = 'passed', archive_reason = 'Auto-archived: older than 2 weeks without action'
+                           WHERE job_id = ?""",
+                        (old_job["job_id"],),
+                    )
+                    write_log(
+                        log_file,
+                        f"  Archived: {old_job['title'][:40]} at {old_job['company'][:20]} (created: {old_job['created_at'][:10]})",
+                    )
+                    results["jobs_auto_archived"] += 1
+                conn.commit()
+            else:
+                write_log(log_file, "No jobs to auto-archive")
+
             conn.close()
 
             # === SUMMARY ===
@@ -1645,6 +1699,10 @@ def register_routes(app):
             write_log(log_file, f"Jobs skipped (duplicates): {results['jobs_skipped']}")
             write_log(log_file, f"Jobs filtered out: {results['jobs_filtered']}")
             write_log(log_file, f"Follow-ups stored: {results['followups_new']}")
+            write_log(
+                log_file,
+                f"Jobs auto-archived (>2 weeks old): {results.get('jobs_auto_archived', 0)}",
+            )
             if results["errors"]:
                 write_log(log_file, f"Errors: {len(results['errors'])}")
 

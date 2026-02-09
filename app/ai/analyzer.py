@@ -25,6 +25,56 @@ AI_RETRYABLE_EXCEPTIONS = (
 )
 
 
+def quick_pre_filter(job: Dict) -> Optional[Tuple[bool, int, str]]:
+    """
+    Quick rule-based pre-filtering to avoid expensive AI calls for obvious mismatches.
+
+    Returns:
+        None if job should go to AI scoring, or (False, score, reason) to reject.
+    """
+    import re
+
+    title = (job.get("title") or "").lower().strip()
+    company = (job.get("company") or "").lower().strip()
+    raw_text = (job.get("raw_text") or "").lower()
+
+    # Reject jobs with no title or company
+    if not title or len(title) < 3:
+        return (False, 10, "rejected: missing or invalid title")
+    if not company or company in ("unknown", "n/a", "none"):
+        return (False, 20, "rejected: unknown company - cannot assess job")
+
+    # Reject placeholder titles from cold applications
+    if title.startswith("position at "):
+        return (False, 15, "rejected: placeholder title from cold application")
+
+    # Reject obvious non-software roles (save API credits)
+    non_software_patterns = [
+        r"\b(mechanical|civil|electrical|chemical|structural|hardware)\s+engineer",
+        r"\b(hvac|plumbing|construction|architect|nurse|physician|dental)",
+        r"\b(sales|account\s+executive|business\s+development|recruiter)",
+        r"\b(game\s+designer|level\s+designer|3d\s+artist|animator)",
+        r"\b(teacher|professor|instructor|tutor)",
+        r"\b(lawyer|attorney|paralegal|legal\s+assistant)",
+        r"\b(accountant|cpa|bookkeeper|auditor)",
+        r"\b(benefits\s+representative|insurance\s+agent)",
+    ]
+
+    for pattern in non_software_patterns:
+        if re.search(pattern, title):
+            return (False, 5, f"rejected: non-software role detected in title")
+
+    # Reject obvious aggregator spam
+    if "jobs via dice" in title or "via linkedin" in title:
+        return (False, 10, "rejected: aggregator placeholder listing")
+
+    # Check for malformed titles (e.g., "Senior at Cloud Engineer Teradata")
+    if re.match(r"^(senior|junior|mid|lead|staff|principal)\s+at\s+", title):
+        return (False, 15, "rejected: malformed title structure")
+
+    return None  # Proceed to AI scoring
+
+
 def ai_filter_and_score(job: Dict, resume_text: str) -> Tuple[bool, int, str]:
     """
     AI-based job filtering and baseline scoring.
@@ -36,6 +86,11 @@ def ai_filter_and_score(job: Dict, resume_text: str) -> Tuple[bool, int, str]:
     Returns:
         Tuple of (should_keep, baseline_score, reason)
     """
+    # Quick pre-filter to save API credits on obvious mismatches
+    pre_filter_result = quick_pre_filter(job)
+    if pre_filter_result is not None:
+        return pre_filter_result
+
     from app.config import get_config
 
     config = get_config()

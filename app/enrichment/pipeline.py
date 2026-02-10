@@ -20,6 +20,7 @@ from app.ai.job_analyzer import (
     create_tech_stack_overlap,
     extract_structured_requirements,
     match_requirements_to_resume,
+    analyze_job_comprehensive,
 )
 from app.filters.salary_filter import (
     parse_salary_string,
@@ -388,6 +389,38 @@ def enrich_job_data(
                             update_values["requirements_match"] = json.dumps(req_match)
                             enriched_fields.append("requirements_match")
                             result["requirements_match"] = req_match
+
+                    # NEW: Comprehensive analysis with apply/skip recommendation
+                    try:
+                        # Get all resumes for comparison
+                        all_resumes = []
+                        try:
+                            resumes = conn.execute(
+                                "SELECT resume_id, name, content FROM resume_variants WHERE is_active = 1"
+                            ).fetchall()
+                            all_resumes = [dict(r) for r in resumes]
+                        except:
+                            pass
+
+                        comprehensive = analyze_job_comprehensive(
+                            job_description=description,
+                            resume_text=resume_text,
+                            job_title=title,
+                            company=company,
+                            all_resumes=all_resumes if all_resumes else None,
+                        )
+
+                        if comprehensive:
+                            update_values["job_analysis"] = json.dumps(comprehensive)
+                            enriched_fields.append("job_analysis")
+                            result["job_analysis"] = comprehensive
+
+                            logger.info(
+                                f"Comprehensive analysis: {comprehensive.get('recommendation', 'unknown')} - "
+                                f"{comprehensive.get('recommendation_reason', 'no reason')}"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Comprehensive analysis failed: {e}")
 
                     logger.info(
                         f"Job analysis complete: {len(exp_requirements)} requirements, "

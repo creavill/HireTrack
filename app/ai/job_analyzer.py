@@ -1328,3 +1328,434 @@ Respond ONLY with valid JSON, no other text."""
 
     # Fall back to rule-based analysis
     return None
+
+
+def detect_red_flags(
+    job_description: str,
+    job_title: str,
+    company: str,
+    posted_date: str = None,
+    applicant_count: int = None,
+) -> List[Dict[str, Any]]:
+    """
+    Detect red flags in a job posting that might indicate it's not worth applying.
+
+    Returns list of red flags with:
+    - flag: Short description
+    - severity: "critical" | "warning" | "info"
+    - reason: Detailed explanation
+    """
+    red_flags = []
+
+    if not job_description:
+        return red_flags
+
+    text_lower = job_description.lower()
+    title_lower = job_title.lower() if job_title else ""
+    company_lower = company.lower() if company else ""
+
+    # === STALE POSTING DETECTION ===
+    if posted_date:
+        try:
+            from datetime import datetime, timedelta
+
+            if isinstance(posted_date, str):
+                # Parse relative dates like "1 month ago", "2 weeks ago"
+                if "month" in posted_date.lower():
+                    months = int(re.search(r"(\d+)", posted_date).group(1))
+                    if months >= 1:
+                        red_flags.append(
+                            {
+                                "flag": "Stale posting",
+                                "severity": "warning",
+                                "reason": f"Posted {months} month(s) ago - may be filled or have many applicants",
+                            }
+                        )
+                elif "week" in posted_date.lower():
+                    weeks = int(re.search(r"(\d+)", posted_date).group(1))
+                    if weeks >= 3:
+                        red_flags.append(
+                            {
+                                "flag": "Older posting",
+                                "severity": "info",
+                                "reason": f"Posted {weeks} weeks ago",
+                            }
+                        )
+        except:
+            pass
+
+    # === HIGH APPLICANT COUNT ===
+    if applicant_count and applicant_count > 100:
+        red_flags.append(
+            {
+                "flag": "High competition",
+                "severity": "warning",
+                "reason": f"Over {applicant_count} applicants - very competitive",
+            }
+        )
+
+    # === SCAM INDICATORS ===
+    scam_patterns = [
+        (r"no\s+experience\s+required", "Too good to be true - no experience for technical role"),
+        (r"work\s+from\s+home\s+\$\d+k", "Suspicious work-from-home salary claim"),
+        (r"unlimited\s+earning", "MLM/scam language"),
+        (r"be\s+your\s+own\s+boss", "MLM/scam language"),
+        (r"(?:urgent|immediate)\s+(?:hire|hiring|start)", "Pressure tactics"),
+    ]
+
+    for pattern, reason in scam_patterns:
+        if re.search(pattern, text_lower):
+            red_flags.append(
+                {"flag": "Potential scam indicator", "severity": "critical", "reason": reason}
+            )
+
+    # Generic/vague company description
+    if not company or company_lower in ["unknown", "confidential", "staffing agency"]:
+        red_flags.append(
+            {
+                "flag": "Hidden company",
+                "severity": "warning",
+                "reason": "Company name not disclosed - could be recruiter farming or fake",
+            }
+        )
+
+    # AI-generated content indicators
+    ai_phrases = [
+        "as a fully remote position",
+        "you'll have the flexibility to work from any location",
+        "our team uses tools like slack for daily chats",
+        "we emphasize asynchronous work",
+    ]
+    ai_count = sum(1 for phrase in ai_phrases if phrase in text_lower)
+    if ai_count >= 3:
+        red_flags.append(
+            {
+                "flag": "Possibly AI-generated",
+                "severity": "warning",
+                "reason": "Job description appears template/AI-generated with generic details",
+            }
+        )
+
+    # === CULTURE RED FLAGS ===
+    culture_issues = [
+        (r"not\s+a\s+9[\s-]to[\s-]5", "Expects overtime as standard", "warning"),
+        (r"fast[\s-]paced\s+environment", "May indicate poor work-life balance", "info"),
+        (r"wear\s+many\s+hats", "Underfunded - will do multiple jobs", "info"),
+        (r"like\s+a\s+family", "Boundary issues, unpaid overtime expected", "warning"),
+        (r"50[\s-]60\+?\s+hours?", "Explicitly requires 50-60+ hour weeks", "critical"),
+        (r"60[\s-]80\+?\s+hours?", "Explicitly requires 60-80+ hour weeks", "critical"),
+        (r"most\s+challenging\s+job", "Warning sign for unrealistic expectations", "warning"),
+        (r"hustle", "Hustle culture, likely overwork expected", "warning"),
+        (r"rockstar|ninja|guru", "Cringe culture, unrealistic role expectations", "info"),
+    ]
+
+    for pattern, reason, severity in culture_issues:
+        if re.search(pattern, text_lower):
+            red_flags.append({"flag": "Culture concern", "severity": severity, "reason": reason})
+
+    # === COMPENSATION RED FLAGS ===
+    # Low salary for senior role
+    salary_match = re.search(r"\$(\d{2,3})[,\s]*(\d{3})?", job_description)
+    if salary_match and "senior" in title_lower:
+        try:
+            salary = int(salary_match.group(1)) * 1000
+            if salary_match.group(2):
+                salary = int(salary_match.group(1) + salary_match.group(2))
+            if salary < 100000:
+                red_flags.append(
+                    {
+                        "flag": "Low salary for level",
+                        "severity": "warning",
+                        "reason": f"${salary:,} seems low for a senior role",
+                    }
+                )
+        except:
+            pass
+
+    # No salary listed
+    if not salary_match and not any(
+        w in text_lower for w in ["competitive salary", "compensation", "pay range"]
+    ):
+        red_flags.append(
+            {"flag": "No salary info", "severity": "info", "reason": "Salary not disclosed"}
+        )
+
+    return red_flags
+
+
+def analyze_job_comprehensive(
+    job_description: str,
+    resume_text: str,
+    job_title: str = "",
+    company: str = "",
+    posted_date: str = None,
+    applicant_count: int = None,
+    all_resumes: List[Dict] = None,
+) -> Dict[str, Any]:
+    """
+    Comprehensive job analysis that mimics Claude's job review style.
+
+    Returns:
+    - recommendation: "apply" | "skip" | "maybe"
+    - recommendation_reason: Clear explanation why
+    - requirements: Extracted structured requirements
+    - requirements_match: What you have vs what you're missing
+    - red_flags: List of concerns
+    - resume_recommendation: Which resume to use
+    - experience_gaps: Specific experience year gaps
+    - key_dealbreakers: Critical missing requirements
+    """
+    result = {
+        "recommendation": "maybe",
+        "recommendation_reason": "",
+        "requirements": {},
+        "requirements_match": {},
+        "red_flags": [],
+        "resume_recommendation": None,
+        "experience_gaps": [],
+        "key_dealbreakers": [],
+        "strengths": [],
+        "analysis_summary": "",
+    }
+
+    if not job_description:
+        result["recommendation"] = "skip"
+        result["recommendation_reason"] = "No job description available"
+        return result
+
+    # === 1. EXTRACT STRUCTURED REQUIREMENTS ===
+    requirements = extract_structured_requirements(job_description)
+    result["requirements"] = requirements
+
+    # === 2. DETECT RED FLAGS ===
+    red_flags = detect_red_flags(job_description, job_title, company, posted_date, applicant_count)
+    result["red_flags"] = red_flags
+
+    # Check for critical red flags
+    critical_flags = [f for f in red_flags if f["severity"] == "critical"]
+    if critical_flags:
+        result["recommendation"] = "skip"
+        result["recommendation_reason"] = critical_flags[0]["reason"]
+        return result
+
+    # === 3. MATCH REQUIREMENTS TO RESUME ===
+    if resume_text:
+        req_match = match_requirements_to_resume(requirements, resume_text)
+        result["requirements_match"] = req_match
+
+        # Identify key dealbreakers
+        dealbreakers = []
+
+        # Check experience gaps
+        resume_lower = resume_text.lower()
+        for exp in requirements.get("experience", []):
+            skill = exp.get("skill", "").lower()
+            years = exp.get("years", 0)
+
+            # Check if this is a core skill not in resume
+            skill_present = any(
+                s in resume_lower for s in [skill, skill.replace(" ", ""), skill.replace("-", " ")]
+            )
+
+            if not skill_present and years >= 3:
+                dealbreakers.append(
+                    {
+                        "type": "experience",
+                        "requirement": f"{years}+ years of {exp.get('skill', 'experience')}",
+                        "reason": f"Resume doesn't show {exp.get('skill')} experience",
+                    }
+                )
+                result["experience_gaps"].append(
+                    {"skill": exp.get("skill"), "years_required": years, "has_skill": False}
+                )
+
+        # Check clearance requirements
+        clearance = requirements.get("clearance")
+        if clearance and clearance.get("current_required"):
+            clearance_terms = ["clearance", "secret", "ts/sci", "public trust", "top secret"]
+            has_clearance = any(term in resume_lower for term in clearance_terms)
+            if not has_clearance:
+                dealbreakers.append(
+                    {
+                        "type": "clearance",
+                        "requirement": f"{clearance.get('level')} clearance",
+                        "reason": "Requires active clearance, not just eligibility",
+                    }
+                )
+
+        # Check required certifications
+        for cert in requirements.get("certifications", []):
+            if cert.get("required"):
+                cert_name = cert.get("name", "").lower()
+                has_cert = cert_name in resume_lower or cert_name.replace(" ", "") in resume_lower
+                if not has_cert:
+                    dealbreakers.append(
+                        {
+                            "type": "certification",
+                            "requirement": cert.get("name"),
+                            "reason": f"Required certification not found in resume",
+                        }
+                    )
+
+        result["key_dealbreakers"] = dealbreakers
+
+        # Identify strengths
+        strengths = []
+        for item in req_match.get("matched", []):
+            if item.get("type") == "experience":
+                strengths.append(f"Has {item.get('description')}")
+            elif item.get("type") == "skill_required":
+                strengths.append(f"Knows {item.get('description')}")
+            elif item.get("type") == "certification":
+                strengths.append(f"Has {item.get('description')}")
+        result["strengths"] = strengths[:10]
+
+        # === 4. DETERMINE RECOMMENDATION ===
+        match_pct = req_match.get("match_summary", {}).get("match_percentage", 0)
+
+        # Critical dealbreakers = skip
+        if len(dealbreakers) >= 3:
+            result["recommendation"] = "skip"
+            result["recommendation_reason"] = (
+                f"Multiple dealbreakers: {', '.join([d['requirement'] for d in dealbreakers[:3]])}"
+            )
+        elif any(d["type"] == "clearance" for d in dealbreakers):
+            result["recommendation"] = "skip"
+            clearance_db = next(d for d in dealbreakers if d["type"] == "clearance")
+            result["recommendation_reason"] = (
+                f"Requires active {clearance_db['requirement']}, not just eligibility"
+            )
+        elif any(d["type"] == "certification" for d in dealbreakers):
+            cert_dbs = [d for d in dealbreakers if d["type"] == "certification"]
+            result["recommendation"] = "skip"
+            result["recommendation_reason"] = (
+                f"Required certification: {cert_dbs[0]['requirement']}"
+            )
+        elif match_pct >= 70:
+            result["recommendation"] = "apply"
+            result["recommendation_reason"] = f"{match_pct}% requirements match - good fit"
+        elif match_pct >= 50:
+            result["recommendation"] = "maybe"
+            missing_count = req_match.get("match_summary", {}).get("missing_count", 0)
+            result["recommendation_reason"] = f"{match_pct}% match, {missing_count} gaps to address"
+        else:
+            result["recommendation"] = "skip"
+            result["recommendation_reason"] = (
+                f"Only {match_pct}% requirements match - too many gaps"
+            )
+
+    # === 5. RESUME RECOMMENDATION ===
+    if all_resumes and len(all_resumes) > 1:
+        best_resume = None
+        best_match = 0
+
+        for resume in all_resumes:
+            resume_content = resume.get("content", "") or resume.get("full_text", "")
+            if not resume_content:
+                continue
+
+            resume_match = match_requirements_to_resume(requirements, resume_content)
+            match_pct = resume_match.get("match_summary", {}).get("match_percentage", 0)
+
+            if match_pct > best_match:
+                best_match = match_pct
+                best_resume = {
+                    "resume_id": resume.get("resume_id") or resume.get("id"),
+                    "name": resume.get("name") or resume.get("title", "Resume"),
+                    "match_percentage": match_pct,
+                }
+
+        if best_resume:
+            result["resume_recommendation"] = best_resume
+
+    # === 6. BUILD ANALYSIS SUMMARY ===
+    summary_parts = []
+
+    if result["recommendation"] == "skip":
+        summary_parts.append(f"Skip. {result['recommendation_reason']}")
+    elif result["recommendation"] == "apply":
+        summary_parts.append(f"Apply! {result['recommendation_reason']}")
+    else:
+        summary_parts.append(f"Maybe. {result['recommendation_reason']}")
+
+    # Add key gaps
+    if result["experience_gaps"]:
+        gaps = result["experience_gaps"][:3]
+        gap_strs = [f"{g['years_required']}+ yrs {g['skill']}" for g in gaps]
+        summary_parts.append(f"Missing: {', '.join(gap_strs)}")
+
+    # Add red flags
+    warning_flags = [f for f in red_flags if f["severity"] == "warning"]
+    if warning_flags:
+        summary_parts.append(f"Concerns: {warning_flags[0]['reason']}")
+
+    result["analysis_summary"] = " | ".join(summary_parts)
+
+    return result
+
+
+def quick_pre_filter(job: Dict) -> Optional[Tuple[bool, int, str]]:
+    """
+    Quick rule-based pre-filtering to avoid expensive AI calls for obvious mismatches.
+
+    Returns None if job should go to AI scoring, or (should_skip, score, reason) tuple.
+    """
+    title = (job.get("title") or "").lower()
+    company = (job.get("company") or "").lower()
+    description = (job.get("job_description") or job.get("full_description") or "").lower()
+
+    # Skip jobs with malformed/garbled titles
+    if title:
+        # Check for weird word order patterns like "Senior at Cloud Engineer"
+        if " at " in title and not title.endswith(" at"):
+            parts = title.split(" at ")
+            if len(parts) == 2 and len(parts[0].split()) <= 2 and len(parts[1].split()) >= 2:
+                return (True, 20, "Malformed job title")
+
+        # Skip if title is too short or just numbers
+        if len(title) < 5 or title.replace(" ", "").isdigit():
+            return (True, 15, "Invalid job title")
+
+    # Skip unknown companies
+    if company in ["unknown", "confidential", "", "n/a"]:
+        return (True, 25, "Unknown company")
+
+    # Check for obvious role mismatches in title
+    skip_titles = [
+        "manager",
+        "director",
+        "vp ",
+        "vice president",
+        "chief ",
+        "cto",
+        "ceo",
+        "cfo",
+        "principal",
+        "staff engineer",
+        "distinguished",
+        "fellow",
+        "intern",
+        "internship",
+        "sales",
+        "marketing",
+        "recruiter",
+        "hr ",
+        "human resources",
+        "nurse",
+        "doctor",
+        "physician",
+        "lawyer",
+        "attorney",
+        "driver",
+        "warehouse",
+        "retail",
+        "cashier",
+    ]
+
+    for skip in skip_titles:
+        if skip in title:
+            # These might still be valid, just lower priority
+            return None
+
+    # No pre-filter, let AI score it
+    return None

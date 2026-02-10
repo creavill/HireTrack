@@ -414,6 +414,16 @@ export default function JobDetailPage() {
     }
   } catch (e) { console.error('Failed to parse tech overlap:', e); }
 
+  // Parse comprehensive job analysis
+  let jobAnalysis = null;
+  try {
+    if (job.job_analysis) {
+      jobAnalysis = typeof job.job_analysis === 'string'
+        ? JSON.parse(job.job_analysis)
+        : job.job_analysis;
+    }
+  } catch (e) { console.error('Failed to parse job analysis:', e); }
+
   const score = job.score || job.baseline_score || 0;
   const statusConfig = STATUS_CONFIG[job.status] || STATUS_CONFIG.new;
   const description = job.full_description || job.job_description;
@@ -536,6 +546,114 @@ export default function JobDetailPage() {
           Delete
         </button>
       </div>
+
+      {/* AI Recommendation Banner */}
+      {jobAnalysis && (
+        <div className={`mb-6 p-5 rounded-sm border ${
+          jobAnalysis.recommendation === 'apply' ? 'bg-patina/10 border-patina/30' :
+          jobAnalysis.recommendation === 'skip' ? 'bg-rust/10 border-rust/30' :
+          'bg-cream/10 border-cream/30'
+        }`}>
+          <div className="flex items-start gap-4">
+            {/* Recommendation Badge */}
+            <div className={`flex-shrink-0 px-4 py-2 rounded-sm font-display text-lg font-bold ${
+              jobAnalysis.recommendation === 'apply' ? 'bg-patina text-parchment' :
+              jobAnalysis.recommendation === 'skip' ? 'bg-rust text-parchment' :
+              'bg-cream text-ink'
+            }`}>
+              {jobAnalysis.recommendation === 'apply' ? 'Apply' :
+               jobAnalysis.recommendation === 'skip' ? 'Skip' : 'Maybe'}
+            </div>
+
+            {/* Recommendation Details */}
+            <div className="flex-1">
+              <p className={`text-sm font-medium mb-2 ${
+                jobAnalysis.recommendation === 'apply' ? 'text-patina' :
+                jobAnalysis.recommendation === 'skip' ? 'text-rust' :
+                'text-cream'
+              }`}>
+                {jobAnalysis.recommendation_reason}
+              </p>
+
+              {/* Key Dealbreakers */}
+              {jobAnalysis.key_dealbreakers?.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-rust uppercase tracking-wide mb-2">Dealbreakers:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {jobAnalysis.key_dealbreakers.slice(0, 4).map((db, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 px-2 py-1 bg-rust/10 text-rust text-xs rounded-sm">
+                        <XCircle size={12} />
+                        {db.requirement}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Experience Gaps */}
+              {jobAnalysis.experience_gaps?.length > 0 && !jobAnalysis.key_dealbreakers?.length && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-slate uppercase tracking-wide mb-2">Experience Gaps:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {jobAnalysis.experience_gaps.slice(0, 4).map((gap, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 px-2 py-1 bg-warm-gray/20 text-slate text-xs rounded-sm">
+                        <Clock size={12} />
+                        {gap.years_required}+ yrs {gap.skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Strengths */}
+              {jobAnalysis.strengths?.length > 0 && jobAnalysis.recommendation !== 'skip' && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-patina uppercase tracking-wide mb-2">Your Strengths:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {jobAnalysis.strengths.slice(0, 5).map((str, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 px-2 py-1 bg-patina/10 text-patina text-xs rounded-sm">
+                        <CheckCircle size={12} />
+                        {str}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Red Flags */}
+              {jobAnalysis.red_flags?.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-rust uppercase tracking-wide mb-2">
+                    <AlertTriangle size={12} className="inline mr-1" />
+                    Red Flags:
+                  </p>
+                  <div className="space-y-1">
+                    {jobAnalysis.red_flags.slice(0, 3).map((flag, i) => (
+                      <p key={i} className={`text-xs ${
+                        flag.severity === 'critical' ? 'text-rust' :
+                        flag.severity === 'warning' ? 'text-cream' : 'text-slate'
+                      }`}>
+                        • {flag.reason}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Resume Recommendation */}
+              {jobAnalysis.resume_recommendation && (
+                <div className="mt-3 pt-3 border-t border-warm-gray/30">
+                  <p className="text-xs text-slate">
+                    <span className="font-semibold">Recommended Resume:</span>{' '}
+                    <span className="text-copper">{jobAnalysis.resume_recommendation.name}</span>
+                    <span className="text-slate/60"> ({jobAnalysis.resume_recommendation.match_percentage}% match)</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

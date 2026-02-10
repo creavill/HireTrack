@@ -350,6 +350,13 @@ def run_migrations(conn):
         conn.execute("ALTER TABLE jobs ADD COLUMN structured_requirements TEXT")  # JSON
         conn.execute("ALTER TABLE jobs ADD COLUMN requirements_match TEXT")  # JSON
 
+    # Migration: Add comprehensive analysis column (apply/skip recommendation)
+    if "job_analysis" not in jobs_columns:
+        logger.info("Migrating database: adding job_analysis column...")
+        conn.execute(
+            "ALTER TABLE jobs ADD COLUMN job_analysis TEXT"
+        )  # JSON - comprehensive analysis
+
     # Migration: Create enhanced scan_runs table for comprehensive scan history
     try:
         conn.execute("""
